@@ -1,0 +1,29 @@
+version: '3.9'
+
+services:
+  pluck:
+    build:
+      context: .
+      target: development
+    container_name: pluck
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "9221:9221"
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis/redis-stack:latest
+    command: ["redis-server", "--requirepass", "key_admin", "--loadmodule", "/opt/redis-stack/lib/redisearch.so"]
+    ports:
+      - "6372:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

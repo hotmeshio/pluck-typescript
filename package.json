@@ -1,0 +1,46 @@
+{
+  "name": "@hotmeshio/pluck",
+  "version": "0.0.1",
+  "description": "Operationalize Your Data",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hotmeshio/pluck-typescript.git"
+  },
+  "homepage": "https://github.com/hotmeshio/pluck-typescript#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "rimraf ./build",
+    "build": "tsc --build tsconfig.json",
+    "clean-build": "npm run clean && npm run build",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --fix --ext .ts",
+    "start": "ts-node src/index.ts",
+    "test": "NODE_ENV=test jest --forceExit --verbose",
+    "test:index": "NODE_ENV=test jest ./tests/index.test.ts --forceExit --verbose"
+  },
+  "keywords": [],
+  "author": "luke.birdeau@gmail.com",
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "@hotmeshio/hotmesh": "^0.0.29"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.19.11",
+    "@typescript-eslint/eslint-plugin": "^5.56.0",
+    "@typescript-eslint/parser": "^5.56.0",
+    "eslint": "^8.36.0",
+    "ioredis": "^5.3.2",
+    "jest": "^29.5.0",
+    "redis": "^4.6.6",
+    "rimraf": "^4.4.1",
+    "ts-jest": "^29.0.5",
+    "ts-node": "^10.9.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.0.4"
+  }
+}

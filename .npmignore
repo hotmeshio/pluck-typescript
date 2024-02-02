@@ -1,0 +1,12 @@
+node_modules/
+src/
+tests/
+docs/
+*.log
+*.test.ts
+.eslintignore
+.eslintrc
+docker-compose.yml
+Dockerfile
+jest.config.js
+tsconfig.json
