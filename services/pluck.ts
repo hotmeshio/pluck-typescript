@@ -152,9 +152,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * Awakens a paused function and removes it from the cache. This method is useful for
-   * managing the lifecycle of cached remote function executions, specifically to clear
-   * them before their natural expiration if they are no longer needed.
+   * Flushes a function with a `ttl` of 'infinity'.
    * 
    * @param {string} entity - The global identifier for the remote function. Used to
    *                          specify which function's cache entry is to be flushed.
@@ -180,7 +178,7 @@ class Pluck extends MeshOS {
    * // management of cache resources and potentially freeing up space or resetting state.
    */
   async flush(entity: string, argsOrId: any[] | string, options: ExecOptions = {}) {
-    const workflowId = `${entity}-${typeof argsOrId === 'string' ? argsOrId : this.mintGuid(argsOrId)}`;
+    const workflowId = `${options.prefix ?? entity}-${typeof argsOrId === 'string' ? argsOrId : this.mintGuid(argsOrId)}`;
     this.validate(workflowId);
 
     const client = await this.getClient();

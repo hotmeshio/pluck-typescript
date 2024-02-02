@@ -1,7 +1,7 @@
 # Pluck
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-Call and cache functions from anywhere on the network. Pluck helps you **Operationalize your Data**. 
+Call and cache functions across your microservices network. *Pluck helps **connect**, **organize** and* **operationalize** *your data*. 
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40hotmeshio%2Fpluck.svg)](https://badge.fury.io/js/%40hotmeshio%2Fpluck)
@@ -17,11 +17,11 @@ Consider the following. It's a typical microservices network, with a tangled mes
 
 <img src="./img/operational_data_layer.gif" alt="Current State of the microservices network with functions" style="max-width:100%;width:600px;">
 
-Pluck inverts control and creates an *ad hoc*, Redis-backed network of functions (your "operational data layer"). It's a simple, yet powerful, way to expose, unify and extend your most important functions.
+Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational data layer"). It's a simple, yet powerful, way to expose, unify and extend your most important functions.
 
 ## Design
 ### Connect
-Connect and expose target functions. Here the `greet` function is added as 'greeting'.
+Connect and expose target functions. Here the `greet` function is registerd as 'greeting'.
 
 ```javascript
 import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
@@ -75,13 +75,9 @@ const response = await pluck.exec('greeting',
 ```
 
 ## Operationalize Your Data
-Setting `ttl` to 'infinity' will cache the function response indefinitely, and the data will be persisted to Redis as a **durable workflow** (until it is explicitly removed using `flush`). During this time you can bind *Hooks* to the workflow to extend its functionality. Hooks are *subroutines* that run as parallel transactions with read and write access to shared function state.
+Setting `ttl` to 'infinity' will cache the function response indefinitely as a **durable workflow** (until it is explicitly removed using `pluck.flush`). During this time you can bind *Hooks* to the workflow to extend its functionality.
 
-```javascript
-await pluck.flush('greeting', 'jsmith123');
-```
-
-Consider the 'greet' function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
+Hooks are *subroutines* that run as parallel transactions with read and write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
 
 ```javascript
 functon greet (email: string, user: { first: string, last: string}) {
@@ -96,7 +92,7 @@ functon greet (email: string, user: { first: string, last: string}) {
 }
 ```
 
-**Hooks** are ordinary JavaScript functions. They run as subroutines and can read and write shared function state. This example also showcases something you wouldn't expect: *it sends a newsletter then sleeps for a month*. Replace cron jobs and adjunct services with an intuitive, functional approach. It's what makes operationalization so powerful.
+**Hooks** are authored as ordinary JavaScript functions, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example also showcases something you wouldn't expect: it sends a newsletter and then *sleeps for a month*. With just a few lines of code, you've added a thread-safe, transactionally-backed, recurring subroutine.
 
 ```javascript
 
@@ -120,9 +116,8 @@ pluck.connect('newsletter.unsubscribe', async () => {
 });
 ```
 
-Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer). It can also be called from within your functions or inside another hook.
+Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer). It can also be called from within your connected functions or inside another hook.
 
-```javascript
 
 ```javascript
 await pluck.hook('greeting', 'jsmith123', 'newsletter.unsubscribe', []);
