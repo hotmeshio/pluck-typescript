@@ -15,7 +15,7 @@ Pluck works by inverting the relationship to Redis: those functions that once us
 
 Consider the following. It's a typical microservices network, with a tangled mess of services and functions. There's important business logic in there (functions like *A*, *B* and *C* critical!), but they're hard to find and access.
 
-<img src="./img/operational_data_layer.gif" alt="Current State of the microservices network with functions" style="max-width:100%;width:600px;">
+<img src="https://raw.githubusercontent.com/hotmeshio/pluck-typescript/main/img/operational_data_layer.gif?token=GHSAT0AAAAAACAKHHFDYIXHFGYQJ5JWBTBCZN5MMZA" alt="Current State of the microservices network with functions" style="max-width:100%;width:600px;">
 
 Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational data layer"). It's a simple, yet powerful, way to expose, unify and extend your most important functions.
 
