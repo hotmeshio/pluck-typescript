@@ -57,7 +57,7 @@ const response = await pluck.exec(
   'greeting',
   ['jsmith@pluck', {first: 'Jan'}],
   { id: 'jsmith', ttl: '15 minutes'}
-  );
+);
 ```
 
 ### Execute and Operationalize
@@ -67,8 +67,8 @@ Provide a `ttl` of `infinity` to operationalize the data. It's now a **durable w
 const response = await pluck.exec(
   'greeting',
   ['jsmith@pluck', {first: 'Jan'}],
-  { id: 'jsmith', ttl: '15 minutes'}
-  );
+  { id: 'jsmith', ttl: 'infinity'}
+);
 ```
 
 ### Flush
@@ -100,7 +100,7 @@ functon greet (email: string, user: { first: string}) {
 }
 ```
 
-**Hooks** are authored as ordinary JavaScript functions, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example also showcases something you wouldn't expect: it sends a newsletter and then *sleeps for a month*. With just a few lines of code, you've added a thread-safe, transactionally-backed, recurring subroutine.
+**Hooks** are authored as ordinary JavaScript functions, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example showcases a few, including one you wouldn't expect: it sends a newsletter and then *sleeps for a month*. With just a few lines of code, you've added a thread-safe, transactionally-backed, recurring subroutine.
 
 ```javascript
 
@@ -136,7 +136,7 @@ await pluck.hook('greeting', 'jsmith123', 'newsletter.unsubscribe', ['user-reque
 ```
 
 ## Build and Test
-The source files include a docker-compose that spins up one Redis instance and one Node instances. The RediSearch module is enabled.
+The source files include a docker-compose that spins up one Redis instance and one Node instances. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
 
 Deploy the container:
 
