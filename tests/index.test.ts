@@ -3,6 +3,8 @@ import * as Redis from 'redis';
 import config from './$setup/config';
 import * as activities from './activities';
 import { Durable, Pluck, MeshOS, HotMesh } from '../index';
+import { JobOutput } from '@hotmeshio/hotmesh/build/types/job';
+import { StringStringType, WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
 
 describe('Pluck`', () => {
   const { Client, Worker } = Durable;
@@ -15,7 +17,24 @@ describe('Pluck`', () => {
     password: config.REDIS_PASSWORD,
     database: config.REDIS_DATABASE,
   };
-  const pluck = new Pluck(Redis, options);
+
+  //configure pluck instance will full set of options
+  //include redis instance and model/schema for use in search
+  const pluck = new Pluck(
+    Redis,
+    options,
+    { email: { 
+        type: 'string', required: true 
+      }
+    },
+    { schema: {
+        email: { type: 'TEXT', sortable: true },
+        newsletter: { type: 'TAG', sortable: true }
+      },
+      index: 'greeting',
+      prefix: ['greeting'],
+    } as WorkflowSearchOptions
+  );
 
   //wrap expensive/idempotent functions using `once` flag
   const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
@@ -25,6 +44,7 @@ describe('Pluck`', () => {
   let shouldThrowError = false;
   let errorCount = 0;
   let callCount = 0;
+  const reason = 'I am tired of newsletters';
 
   const greet = async (email: string, user: { first: string, last: string}): Promise<string> => {
     callCount++;
@@ -46,7 +66,7 @@ describe('Pluck`', () => {
     console.log('sent ONE newsletter to ', email, sent);
 
     //spawn the `sendRecurringNewsLetter` hook (a parallel subroutine)
-    if (email === 'fdoe@pluck.com') {
+    if (email === 'floe.doe@pluck.com') {
       const msgId = await Pluck.MeshOS.hook({
         args: [],
         workflowName: 'subscribe',
@@ -61,21 +81,35 @@ describe('Pluck`', () => {
     return `Hello, ${user.first} ${user.last}. Your email is [${email}].`;
   }
 
+  //once connected by pluc, this function will become a 'hook'
+  //hook functions are reentrant processes and use the job
+  //state its bound to when initialized.
   const sendRecurringNewsLetter = async () => {
+    //access shared state using the 'search' object
     const search = await Pluck.MeshOS.search();
     let email: string;
+    let shouldProceed: boolean;
     do {
-      //hook function can access shared state
       email = await search.get('email');
-      //functions that should only run once should be wrapped
-      const sent = await sendNewsLetter(email);
-      console.log('sent ONE RECURRING newsletter to ', email, sent);
-      //sleep for a week, month, or a few seconds when testing
-      await Pluck.MeshOS.sleep('5 seconds');
-      //just woke up! set to no, to stop cycling
+      console.log('hook now running; send newsletter to ', email);
+
+      //the 'sendNewsLetter' function is a `proxy` and will only run once
+      await sendNewsLetter(email);
+
+      //set `newsletter` pref to 'no', to stop cycling while testing
       await search.set('newsletter', 'no');
-    } while(await search.get('newsletter') === 'yes');
-    console.log('hook now exiting', email);
+      shouldProceed = await search.get('newsletter') === 'yes';
+    } while(shouldProceed);
+    console.log('hook now exiting; shouldProceed', email, shouldProceed);
+  }
+
+  //another hook function to unsubscribe from the newsletter
+  const unsubscribeFromNewsLetter = async (reason: string) => {
+    const search = await Pluck.MeshOS.search();
+    const email = await search.get('email');
+    console.log('hook now running; unsubscribe from newsletter >', email, 'no', reason);
+    await search.set('newsletter', 'no', 'reason', reason);
+    console.log('hook now exiting; unsubscribe from newsletter >', 'done');
   }
 
   beforeAll(async () => {
@@ -95,8 +129,14 @@ describe('Pluck`', () => {
       const worker = await pluck.connect(entityName, greet);
       expect(worker).toBeDefined();
     });
+
     it('should connect a hook function', async () => {
       const worker = await pluck.connect('subscribe', sendRecurringNewsLetter);
+      expect(worker).toBeDefined();
+    });
+
+    it('should connect another hook function', async () => {
+      const worker = await pluck.connect('unsubscribe', unsubscribeFromNewsLetter);
       expect(worker).toBeDefined();
     });
   });
@@ -115,22 +155,75 @@ describe('Pluck`', () => {
           //different than the 'args' input data which the workflow
           //receives as its first argument...this data is available
           //to the workflow via the 'search' object)
-          //NOTE: data can be updated during workflow execution
+          //NOTE: search data can be read/written during workflow execution
           search: {
             data: {
               fred: 'flintstone',
               barney: 'rubble',
             }
-          }
-        }
-      );
+          },
+          id: 'jdoe',
+        });
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
       expect(brokered).toEqual(direct);
+      //NOTE: job 'jdoe' is not cached (does not have a ttl);
+      //      but it does have an 'id' and before it gets
+      //      garbage collected in 2 minutes, the unit tests
+      //      that follow will access shared job state, using
+      //      raw Redis commands to test speed and accuracy
+      //      of merging data in motion (process data) and
+      //      data at rest (state data), as both are saved
+      //      to the same unidimensional Redis HASH.
     });
 
-    it('should exec a long-running function', async () => {
+    it('should return RAW fields (HGETALL)', async () => {
+      const email = 'jdoe@pluck.com';
+      const name = {first: 'John', last: 'Doe'};
+      const direct = await localGreet(email, name);
+      const raw = await pluck.raw('greeting', 'jdoe');
+      expect(raw._fred).toEqual('flintstone');
+      expect(raw.aBa).toEqual(direct);
+    });
+
+    it('should return ALL `state` fields', async () => {
+      const all = await pluck.all('greeting', 'jdoe');
+      expect(all.fred).toEqual('flintstone');
+      expect(all.aBa).toBeUndefined();
+    });
+
+    it('should GET named `state` fields', async () => {
+      const some = await pluck.get('greeting', 'jdoe', {
+        fields: ['fred', 'newsletter']
+      });
+      expect(some.fred).toEqual('flintstone');
+      expect(some.newsletter).toEqual('yes');
+      expect(some.barney).toBeUndefined();
+    });
+
+    it('should SET named `state` fields', async () => {
+      const numAdded = await pluck.set('greeting', 'jdoe', {
+        //set 2 new fields and overwrite 1 existing field
+        search: { data: { wilma: 'flintstone', bce: '-1000000', email: 'wstone@pluck.com' } }
+      });
+      expect(numAdded).toEqual(2);
+    });
+
+    it('should INCR named `state` field', async () => {
+      const newAmount = await pluck.incr('greeting', 'jdoe', 'bce', 1);
+      expect(newAmount).toEqual(-999999);
+    });
+
+    it('should DEL named `state` fields', async () => {
+      const numDeleted = await pluck.del('greeting', 'jdoe', {
+        //delete 2 fields (and ignore 1 non-existent field: emails)
+        fields: ['wilma', 'bce', 'emails']
+      });
+      expect(numDeleted).toEqual(2);
+    });
+
+    it('should exec a long-running function that calls a proxy', async () => {
       const email = 'fdoe@pluck.com';
       const name = {first: 'Fred', last: 'Doe'};
 
@@ -138,13 +231,44 @@ describe('Pluck`', () => {
       const brokered = await pluck.exec<Promise<string>>(
         'greeting',
         [email, name],
-        { ttl: '1 minute' }
+        { ttl: '1 second', id: 'abc123'}
       );
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
-
       expect(brokered).toEqual(direct);
+    });
+
+    it('should exec a durable function (ttl:infinity) that calls a proxy and hook', async () => {
+      const email = 'floe.doe@pluck.com';
+      const name = {first: 'Floe', last: 'Doe'};
+
+      //call with Pluck (Redis will govern the exchange)
+      const brokered = await pluck.exec<Promise<string>>(
+        'greeting',
+        [email, name],
+        { ttl: 'infinity', id: 'abc456' }
+      );
+
+      //call directly (NodeJS will govern the exchange)
+      const direct = await localGreet(email, name);
+      expect(brokered).toEqual(direct);
+    });
+
+    it('should flush a durable function (ttl:infinity)', async () => {
+      //flush causes the main thread to exit (it waits for the flush signal)
+      await pluck.flush('greeting', 'abc456');
+      //sleep long enough for running hooks in the test to awaken from sleep
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      let pluckResponse: JobOutput;
+      try {
+        pluckResponse = await pluck.info('greeting', 'abc456');
+        console.log('pluckResponse', pluckResponse);
+      } catch (error) {
+        expect(error.message).toBe(`Job greeting-abc456 not found`);
+        return;
+      }
+      expect(pluckResponse.data.done).toEqual(true);
     }, 15_000);
 
     it('should retry if it fails', async () => {
@@ -159,7 +283,7 @@ describe('Pluck`', () => {
       const brokered = await pluck.exec<Promise<string>>(
         'greeting',
         [email, name],
-        { flush: true, id: idemKey }
+        { id: idemKey }
       );
       expect(errorCount).toEqual(2);
       expect(shouldThrowError).toBeFalsy();
@@ -173,8 +297,71 @@ describe('Pluck`', () => {
 
   describe('info', () => {
     it('should return the full function profile', async () => {
-      const pluckResponse = await pluck.info('greeting', idemKey);
-      expect(pluckResponse.data.done).toEqual(true);
+      try {
+        const pluckResponse = await pluck.info('greeting', idemKey);
+        expect(pluckResponse.data.done).toEqual(true);
+      } catch (error) {
+        console.log('error', error);
+        expect(error.message).toBe(`Job greeting-${idemKey} not found`);
+      }
+    });
+  });
+
+  describe('hook', () => {
+    it('should call the `unsubscribe` hook function', async () => {
+      let pluckData = await pluck.all('greeting', idemKey);
+      expect(pluckData.newsletter).toEqual('yes');
+      //hooks only return an id (this is the `guarantee` the hook will complete)
+      const hookId = await pluck.hook('greeting', idemKey, 'unsubscribe', [reason]);
+      expect(hookId).toBeDefined();
+      //hooks are async; sleep to allow the hook to run
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      //by now the data should have been updated to 'no'
+      pluckData = await pluck.all('greeting', idemKey);
+      expect(pluckData.newsletter).toEqual('no');
+      expect(pluckData.reason).toEqual(reason);
+    });
+  });
+
+  describe('search', () => {
+    it('should create a search index', async () => {
+      await pluck.createSearchIndex(
+        'greeting',
+        undefined,
+        {
+          schema: {
+            email: { type: 'TEXT', sortable: true },
+            newsletter: { type: 'TAG', sortable: true }
+          },
+          index: 'greeting',
+          prefix: ['greeting'],
+        });
+    });
+
+    it('should search for records where newsletter is no', async () => {
+      const indexedResults = await pluck.findWhere(
+        'greeting',
+        { query: [
+            { field: 'newsletter', is: '=', value: 'no' }
+          ],
+          return: ['email', 'newsletter', 'reason']
+      }) as StringStringType[];
+      //most recent result includes a reason
+      expect(indexedResults.length).toBeGreaterThan(0);
+      expect(indexedResults[indexedResults.length - 1].newsletter).toEqual('no');
+      expect(indexedResults[indexedResults.length - 1].reason).toEqual(reason);
+    });
+
+    it('should count records where newsletter is no', async () => {
+      const count = await pluck.findWhere(
+        'greeting',
+        { query: [
+            { field: 'newsletter', is: '=', value: 'no' }
+          ],
+          count: true
+      });
+      console.log('search count >', count);
+      expect(count).toBeGreaterThan(0);
     });
   });
 });

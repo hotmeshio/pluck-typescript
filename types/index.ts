@@ -10,15 +10,17 @@ type WorkflowSearchOptions = {
   data?: Record<string, string>;
 }
 
-type ExecOptions = {
+type CallOptions = {
   ttl?: string;
   flush?: boolean;
   id?: string;
-  $guid?: string;
+  $guid?: string; //full GUID (including prefix)
+  $type?: string; // exec, hook, proxy
   await?: boolean; //if set to false explicitly it will not await the result
   taskQueue?: string; //optional taskQueue for the workflowId (defaults to entity)
   prefix?: string; //optional prefix for the workflowId (defaults to entity)
   search?: WorkflowSearchOptions;
+  fields?: string[]; //list of  state field names to return (this is NOT the final response)
 };
 
-export { ConnectOptions, ExecOptions, WorkflowSearchOptions };
+export { ConnectOptions, CallOptions, WorkflowSearchOptions };
