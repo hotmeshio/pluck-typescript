@@ -79,7 +79,7 @@ const response = await pluck.flush('greeting', 'jsmith');
 ```
 
 ## Data in Motion: Operationalize Your Functions
-Setting `ttl` to 'infinity' operationalizes an ordinary functions as a **durable workflow**. During this time you can bind *Hooks* to the workflow to extend its functionality.
+Setting the `ttl` to 'infinity' operationalizes an ordinary function as a **durable workflow**. During this time you can bind transactional *Hooks* to the workflow to extend its functionality.
 
 Hooks are *subroutines* that run as parallel transactions with read and write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
 
@@ -100,7 +100,7 @@ functon greet (email: string, user: { first: string}) {
 }
 ```
 
-**Hooks** are authored as ordinary JavaScript functions, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example showcases a few, including one you wouldn't expect: it sends a newsletter and then *sleeps for a month*. With just a few lines of code, you've added a thread-safe, transactionally-backed, recurring subroutine.
+**Hooks** are authored as ordinary JavaScript, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example showcases a few, including one you wouldn't expect: it sends a newsletter and then *sleeps for a month*. Add support transactionally-backed, recurring subroutines with just a few lines of code.
 
 ```javascript
 
