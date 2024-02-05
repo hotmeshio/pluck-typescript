@@ -71,17 +71,14 @@ const response = await pluck.exec(
 );
 ```
 
-### Flush
-Call `flush` to cancel a durable workflow. This will remove the function response from the cache and cancel any associated hooks.
+## Data in Motion: Operationalize Your Functions
+Plucky does more than routing functions. Setting the `ttl` to 'infinity' *operationalizes* an ordinary function, converting into a **durable workflow**.  Your functions will run as part of the Redis-backed operational data layer and can only be removed by calling `flush`.
 
 ```javascript
 const response = await pluck.flush('greeting', 'jsmith');
 ```
 
-## Data in Motion: Operationalize Your Functions
-Setting the `ttl` to 'infinity' operationalizes an ordinary function as a **durable workflow**. During this time you can bind transactional *Hooks* to the workflow to extend its functionality.
-
-Hooks are *subroutines* that run as parallel transactions with read and write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
+During this time you can bind transactional *Hooks* to extend your function. Hooks are *subroutines* that run as parallel transactions with read and write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
 
 ```javascript
 functon greet (email: string, user: { first: string}) {
@@ -100,7 +97,7 @@ functon greet (email: string, user: { first: string}) {
 }
 ```
 
-**Hooks** are authored as ordinary JavaScript, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example showcases a few, including one you wouldn't expect: it sends a newsletter and then *sleeps for a month*. Add support transactionally-backed, recurring subroutines with just a few lines of code.
+**Hooks** are authored as ordinary JavaScript, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example showcases a few, including one you wouldn't expect: it sends a newsletter and then *sleeps for a month*. Add support for transactionally-backed, recurring subroutines with just a few lines of code.
 
 ```javascript
 

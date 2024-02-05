@@ -72,7 +72,7 @@ describe('Pluck`', () => {
         workflowName: 'subscribe',
         taskQueue: 'subscribe',
       });
-      console.log('hooked a newsletter with id: ', msgId);
+      console.log('hooked a newsletter with id >', msgId);
     }
     return `Hello, ${user.first} ${user.last}. Your email is [${email}].`;
   }
@@ -91,7 +91,7 @@ describe('Pluck`', () => {
     let shouldProceed: boolean;
     do {
       email = await search.get('email');
-      console.log('hook now running; send newsletter to ', email);
+      console.log('hook now running; send newsletter to >', email);
 
       //the 'sendNewsLetter' function is a `proxy` and will only run once
       await sendNewsLetter(email);
@@ -100,16 +100,16 @@ describe('Pluck`', () => {
       await search.set('newsletter', 'no');
       shouldProceed = await search.get('newsletter') === 'yes';
     } while(shouldProceed);
-    console.log('hook now exiting; shouldProceed', email, shouldProceed);
+    console.log('hook now exiting; shouldProceed >', email, shouldProceed);
   }
 
   //another hook function to unsubscribe from the newsletter
   const unsubscribeFromNewsLetter = async (reason: string) => {
     const search = await Pluck.MeshOS.search();
     const email = await search.get('email');
-    console.log('hook now running; unsubscribe from newsletter >', email, 'no', reason);
+    console.log('hook running; unsubscribe? >', email, 'no', reason);
     await search.set('newsletter', 'no', 'reason', reason);
-    console.log('hook now exiting; unsubscribe from newsletter >', 'done');
+    console.log('hook exiting; unsubscribed? >', 'done');
   }
 
   beforeAll(async () => {
@@ -263,7 +263,7 @@ describe('Pluck`', () => {
       let pluckResponse: JobOutput;
       try {
         pluckResponse = await pluck.info('greeting', 'abc456');
-        console.log('pluckResponse', pluckResponse);
+        console.log('job data (info) >', pluckResponse);
       } catch (error) {
         expect(error.message).toBe(`Job greeting-abc456 not found`);
         return;
@@ -338,28 +338,43 @@ describe('Pluck`', () => {
         });
     });
 
-    it('should search for records where newsletter is no', async () => {
+    it('should conditionally search and limit response fields', async () => {
       const indexedResults = await pluck.findWhere(
         'greeting',
         { query: [
             { field: 'newsletter', is: '=', value: 'no' }
           ],
           return: ['email', 'newsletter', 'reason']
-      }) as StringStringType[];
+      }) as {count: number, data: StringStringType[]};
       //most recent result includes a reason
-      expect(indexedResults.length).toBeGreaterThan(0);
-      expect(indexedResults[indexedResults.length - 1].newsletter).toEqual('no');
-      expect(indexedResults[indexedResults.length - 1].reason).toEqual(reason);
+      console.log('Indexed Search Results >', indexedResults);
+      expect(indexedResults.data.length).toBeGreaterThan(0);
+      expect(indexedResults.data[indexedResults.data.length - 1].newsletter).toEqual('no');
+      expect(indexedResults.data[indexedResults.data.length - 1].reason).toEqual(reason);
     });
 
-    it('should count records where newsletter is no', async () => {
+    it('should conditionally search and paginate responses', async () => {
+      const indexedResults = await pluck.findWhere(
+        'greeting',
+        { query: [
+            { field: 'newsletter', is: '=', value: 'no' }
+          ],
+          return: ['email', 'newsletter', 'reason'],
+          limit: { start: 1, size: 1} // 0-based index (get second result)
+      }) as {count: number, data: StringStringType[]};
+      //most recent result includes a reason
+      expect(indexedResults.data.length).toBeGreaterThanOrEqual(1); //`max count` is 1 less than `return count`
+      expect(indexedResults.data[indexedResults.data.length - 1].newsletter).toEqual('no');
+    });
+
+    it('should conditionally count records', async () => {
       const count = await pluck.findWhere(
         'greeting',
         { query: [
             { field: 'newsletter', is: '=', value: 'no' }
           ],
           count: true
-      });
+      }) as number;
       console.log('search count >', count);
       expect(count).toBeGreaterThan(0);
     });

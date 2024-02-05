@@ -49,9 +49,10 @@ class Pluck extends MeshOS {
 
   transformArrayToHashes(input: [number, ...Array<string | string[]>]): StringStringType[] {
     const [count, ...rest] = input;
+    const max = rest.length / 2
     const hashes: StringStringType[] = [];
     // Process each item to convert into a hash object
-    for (let i = 0; i < count * 2; i += 2) {
+    for (let i = 0; i < max * 2; i += 2) {
       const fields = rest[i + 1] as string[];
       const hash: StringStringType = {};
       for (let j = 0; j < fields.length; j += 2) {
@@ -368,9 +369,8 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * Retrieves the state of a remote function execution, including metadata such as 
-   * execution status and result. This method can be used to query the status of a job
-   * either by passing a set of arguments used for the job or a specific job identifier.
+   * Retrieves the job profile for the function execution, including metadata such as 
+   * execution status and result.
    * 
    * @param {string} entity - The global identifier for the remote function.
    * @param {string} id - identifier for the job
@@ -397,11 +397,11 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * gets the remote function state. this is different that the function respose
-   * returned by the exec method which represents the return value from the
+   * returns the remote function state. this is different than the function respose
+   * returned by the `exec` method which represents the return value from the
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set:
-   * 1) when the record is first created (provide 'search.data' options to exec)
+   * 1) when the record is first created (provide `options.search.data` to `exec`)
    * 2) during function (await (await new Pluck.MeshOS.search()).set(...))
    * 3) during hook execution (await (await new Pluck.MeshOS.search()).set(...))
    * 4) via the pluck SDK (provide name/value pairs and call `this.set`)
@@ -445,7 +445,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * gets the remote function state for all fields. NOTE:
+   * returns the remote function state for all fields. NOTE:
    * this is slightly less efficient than `get` as it returns all
    * fields (HGETALL), not just the ones requested (HMGT). Depending
    * upon the duration of the workflow, this could represent a large
@@ -627,7 +627,7 @@ class Pluck extends MeshOS {
    * 
    * // returns [ 'John', 89, 'John', 89, ... ]
    */
-  async findWhere(entity: string, options: FindWhereOptions): Promise<StringStringType[] | number> {
+  async findWhere(entity: string, options: FindWhereOptions): Promise<{count: number, query: string, data: StringStringType[]} | number> {
     const args: string[] = [this.generateSearchQuery(options.query)];
     if (options.count) {
       args.push('LIMIT', '0', '0');
@@ -646,10 +646,16 @@ class Pluck extends MeshOS {
       }
     }
     const FTResults = await this.find(entity, options.options ?? {}, ...args);
+    const count = FTResults[0] as number;
+    const sargs = `FT.SEARCH ${this.search.index} ${args.join(' ')}`;
     if (options.count) {
-      return FTResults[0] as number;
+      //always return number format if count is requested
+      return !isNaN(count) || count > 0 ? count : 0;
+    } else if (count === 0) {
+      return { count, query: sargs, data: [] };
     }
-    return this.transformArrayToHashes(FTResults as [number, ...Array<string | string[]>]);
+    const hashes = this.transformArrayToHashes(FTResults as [number, ...Array<string | string[]>]);
+    return { count, query: sargs, data: hashes} 
   }
 
   /**
