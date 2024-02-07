@@ -8,7 +8,11 @@ import { ConnectOptions, CallOptions } from '../types';
 /**
  * Pluck aliases the `MeshOS` class and extends it to
  * provide a more user-friendly interface for establishing
- * an "Operational Data Layer" (ODL)
+ * an "Operational Data Layer" (ODL). Many of the methods
+ * exposed here are wrappers around the `MeshOS` class
+ * methods, providing a more intuitive and expressive API.
+ * 
+ * todo: reorg into submodules: connect, call, search, util
  */
 class Pluck extends MeshOS {
 
@@ -86,9 +90,9 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * mints the Redis job key given the entity name and workflowId (jobid). The
+   * mints the Redis HASH key given the entity name and workflowId (jobid). The
    * item identified by this key is a HASH record with multidimensional process
-   * data interleaved with the function state.
+   * data interleaved with the function state data.
    * @param {string} entity - the entity name
    * @param {string} workflowId - the workflow id
    * @returns {Promise<string>}
@@ -128,21 +132,15 @@ class Pluck extends MeshOS {
    * // Connect the greet function with the 'greeting' entity.
    * pluck.connect('greeting', greet);
    * 
-   * // Demonstrates creating a Pluck instance, defining a function, and
-   * // connecting it to the operational data layer using `connect`.
+   * // Connect durably with a TTL of 'infinity' (all calls cached indefinitely).
+   * pluck.connect('greeting', greet, { ttl: 'infinity' });
+   *
    */
   async connect<T>(entity: string, target: (...args: any[]) => T, options: ConnectOptions = { }): Promise<boolean> {
     this.validate(entity);
 
     const targetFunction = { [entity]: async (...args: any[]): Promise<T> => {
-      let callOptions = args.pop() as CallOptions;
-      if (options.ttl === 'infinity') {
-        if (!callOptions) {
-          callOptions = { ttl: 'infinity' };
-        } else {
-          callOptions.ttl = 'infinity';
-        }
-      }
+      const { callOptions } = this.bindCallOptions(args, options);
       const result = await target.apply(target, args) as T;
       //pause to retain
       await this.pauseForTTL(result, callOptions);
@@ -156,6 +154,40 @@ class Pluck extends MeshOS {
     });
 
     return true;
+  }
+
+  /**
+   * during remote execution, an argument is injected (the last argument)
+   * ths is then used by the 'connect' function to determine if the call
+   * is a hook or a exec call. If it is an exec, the connected function has
+   * precedence and can say that all calls are cached indefinitely.
+   *
+   * @param {any[]} args 
+   * @param {Record<string, any>} options 
+   * @param {Record<string, any>} callOptions 
+   * @returns {Record<string, any>}
+   * @private
+   */
+  bindCallOptions(args: any[], options: ConnectOptions, callOptions: CallOptions = {}): Record<string, any>{
+    if (args.length) {
+      const lastArg = args[args.length - 1];
+      if (lastArg instanceof Object && lastArg.$type === 'exec') {
+        //override the caller and force indefinite caching
+        callOptions = args.pop() as CallOptions;
+        if (options.ttl === 'infinity') {
+          if (!callOptions) {
+            callOptions = { ttl: 'infinity' };
+          } else {
+            callOptions.ttl = 'infinity';
+          }
+        }
+      } else if (lastArg instanceof Object && lastArg.$type === 'hook') {
+        callOptions = args.pop() as CallOptions;
+        //hooks may not affect `ttl` (it is set at invocation)
+        delete callOptions.ttl;
+      }
+    }
+    return { callOptions };
   }
 
   /**

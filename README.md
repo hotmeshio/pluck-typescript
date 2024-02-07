@@ -38,7 +38,7 @@ pluck.connect('greeting', greet);
 ```
 
 ### Execute
-Call connected functions from anywhere on the network with a connection to Redis. Results aren't cached and the remote function will be executed each time by default.
+Call connected functions from anywhere on the network with a connection to Redis. Results aren't cached and the remote function will be invoked each time you call `exec`.
 
 ```javascript
 import Redis from 'ioredis';
@@ -72,7 +72,7 @@ const response = await pluck.exec(
 ```
 
 ## Data in Motion: Operationalize Your Functions
-Plucky does more than routing functions. Setting the `ttl` to 'infinity' *operationalizes* an ordinary function, converting into a **durable workflow**.  Your functions will run as part of the Redis-backed operational data layer and can only be removed by calling `flush`.
+Pluck does more than routing function calls. Setting the `ttl` to 'infinity' *operationalizes* an ordinary function, converting into a **durable workflow**.  Your functions will run as part of the Redis-backed operational data layer and can only be removed by calling `flush`.
 
 ```javascript
 const response = await pluck.flush('greeting', 'jsmith');
