@@ -26,7 +26,7 @@ Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational 
 
 ## Design
 ### Connect
-Connect and expose target functions. Here the `greet` function is registerd as 'greeting'.
+Connect and expose target functions. Here the `greet` function is registered as 'greeting'.
 
 ```javascript
 import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
@@ -143,7 +143,7 @@ await pluck.hook('greeting', 'jsmith123', 'newsletter.unsubscribe', ['user-reque
 ```
 
 ## Build and Test
-The source files include a docker-compose that spins up one Redis instance and one Node instances. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
+The source files include a docker-compose that spins up one Redis instance and one Node instance. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
 
 Deploy the container:
 

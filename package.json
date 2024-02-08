@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/pluck",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Operationalize Your Data",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -22,7 +22,7 @@
     "test": "NODE_ENV=test jest --forceExit --verbose",
     "test:index": "NODE_ENV=test jest ./tests/index.test.ts --forceExit --verbose"
   },
-  "keywords": ["service mesh", "durable workflow", "redis", "operational data"],
+  "keywords": ["service mesh", "durable workflow", "redis", "operational data", "hotmesh"],
   "author": "luke.birdeau@gmail.com",
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
