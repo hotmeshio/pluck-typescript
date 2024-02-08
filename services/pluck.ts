@@ -541,6 +541,26 @@ class Pluck {
    * @example
    * // Retrieve information about a remote function's execution by job ID
    * const jobInfoById = await pluck.info('greeting', 'job-12345');
+   * 
+   * // Response: JobOutput
+   * {
+   *   metadata: {
+   *    tpc: 'durable.execute',
+   *    app: 'durable',
+   *    vrs: '1',
+   *    jid: 'greeting-job-12345',
+   *    aid: 't1',
+   *    ts: '0',
+   *    jc: '20240208014803.980',
+   *    ju: '20240208065017.762',
+   *    js: 0
+   *   },
+   *   data: {
+   *    done: true,
+   *    response: 'Hello, Jan. Your email is [jsmith@pluck.com].',
+   *    workflowId: 'greeting-job-12345'
+   *   }
+   * }
    */
   async info(entity: string, id: string, options: CallOptions = {}): Promise<JobOutput> {
     const workflowId = this.mintGuid(options.prefix ?? entity, id);
