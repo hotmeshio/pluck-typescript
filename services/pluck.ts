@@ -1,29 +1,130 @@
-import { HotMesh, MeshOS, Durable } from '@hotmeshio/hotmesh';
-import { Search } from '@hotmeshio/hotmesh/build/services/durable/search';
-import { JobOutput, FindWhereOptions, FindWhereQuery, FindOptions, WorkflowSearchOptions, StringAnyType, StringStringType } from '@hotmeshio/hotmesh/build/types';
-import { nanoid } from 'nanoid';
 import ms from 'ms';
-import { ConnectOptions, CallOptions } from '../types';
+import { nanoid } from 'nanoid';
+import { HotMesh, MeshOS, Durable } from '@hotmeshio/hotmesh';
+//NOTE: Version 0.0.30 of the HotMesh package will expose this directly
+import { Search } from '@hotmeshio/hotmesh/build/services/durable/search';
+import {
+  ConnectOptions,
+  CallOptions,
+  FindWhereOptions,
+  FindOptions,
+  FindWhereQuery,
+  StringAnyType,
+  StringStringType,
+  JobOutput,
+  WorkflowSearchOptions, 
+  SearchResults} from '../types';
+import {
+  RedisClass,
+  RedisOptions } from '../types/redis';
 
 /**
- * Pluck aliases the `MeshOS` class and extends it to
- * provide a more user-friendly interface for establishing
- * an "Operational Data Layer" (ODL). Many of the methods
- * exposed here are wrappers around the `MeshOS` class
- * methods, providing a more intuitive and expressive API.
+ * Pluck wraps the HotMesh `MeshOS` and `Durable` classes to
+ * provide a simpler, user-friendly method for establishing
+ * an "Operational Data Layer" (ODL).
  * 
- * todo: reorg into submodules: connect, call, search, util
  */
-class Pluck extends MeshOS {
+class Pluck {
 
-  constructor(...args: any[]) {
-    super();
-    this.redisClass = args[0];
-    this.redisOptions = args[1];
-    this.model = args[2] as StringAnyType;
-    this.search = args[3] as WorkflowSearchOptions;
+  /**
+   * The Redis connection options. NOTE: Redis and IORedis
+   * use different formats for their connection config.
+   * @example
+   * // Instantiate Pluck with an `ioredis` configuration.
+   * import Redis from 'ioredis';
+   * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379});
+   * 
+   * // Instantiate Pluck with 'redis' configuration
+   * import * as Redis from 'redis';
+   * const pluck = new Pluck(Redis, {
+   *  socket: {
+   *   host: 'localhost',
+   *   port: 6379,
+   *   tls: false,
+   *  },
+   *  password: 'shhh123',
+   *  database: 0,
+   * };
+
+   */
+  redisOptions: RedisOptions;
+
+  /**
+   * The Redis connection class.
+   *
+   * @example
+   * import Redis from 'ioredis';
+   * import * as Redis from 'redis';
+   */
+  redisClass: RedisClass;
+
+  /**
+   * Optional model declaration (custom workflow state)
+   */
+  model: StringAnyType;
+
+  /**
+   * Optional configuration for Redis FT search
+   */
+  search: WorkflowSearchOptions;
+
+  /**
+   * Provides a set of static
+   * workflow extensions that can be included in
+   * a durable workflow. These include the static methods
+   * like `sleep`, `signal`, `hook`, `executeChild`, etc.
+   * @example
+   * // A durable function using various Pluck.MeshOS methods
+   * function greet (email: string, user: { first: string}) {
+   *   //persist the user's email and newsletter preferences
+   *   const search = await Pluck.MeshOS.search();
+   *   await search.set('email', email, 'newsletter', 'yes');
+
+   *   //set up a recurring newsletter subscription using a 'hook'
+   *   await Pluck.MeshOS.hook({
+   *     workflowName: 'newsletter.subscribe',
+   *     taskQueue: 'newsletter.subscribe',
+   *     args: []
+   *   });
+   *
+   *   return `Hello, ${user.first}. Your email is [${email}].`;
+   * }
+   */
+  static MeshOS = MeshOS.MeshOS;
+
+  /**
+   * 
+   * @param {any} redisClass - the Redis class/import (e.g, `ioredis`, `redis`)
+   * @param {StringAnyType} redisOptions - the Redis connection options. These are specific to the package (refer to their docs!). Each uses different property names and structures. 
+   * @param {StringAnyType} model - Optional. the data model (e.g, `{ name: { type: 'string' } }`)
+   * @param {WorkflowSearchOptions} search - Optional. the Redis search options for JSON-based configuration of the Redis FT.Search module index
+   * @example
+   * // Instantiate Pluck with an `ioredis` configuration.
+   * import Redis from 'ioredis';
+   * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379});
+   * 
+   * // Instantiate Pluck with 'redis' configuration
+   * import * as Redis from 'redis';
+   * const pluck = new Pluck(Redis, {
+   *  socket: {
+   *   host: 'localhost',
+   *   port: 6379,
+   *   tls: false,
+   *  },
+   *  password: 'shhh123',
+   *  database: 0,
+   * };
+   */
+  constructor(redisClass: RedisClass, redisOptions: RedisOptions, model?: StringAnyType, search?: WorkflowSearchOptions) {
+    this.redisClass = redisClass
+    this.redisOptions = redisOptions
+    this.model = model;
+    this.search = search;
   }
 
+  /**
+   * @private
+   */
   validate(entity: string) {
     if (entity.includes(':') ||
         entity.includes('$') ||
@@ -32,6 +133,9 @@ class Pluck extends MeshOS {
     }
   }
 
+  /**
+   * @private
+   */
   async getConnection() {
     return await Durable.Connection.connect({
       class: this.redisClass,
@@ -39,6 +143,10 @@ class Pluck extends MeshOS {
     });
   }
 
+  /**
+   * Return a durable client
+   * @private
+   */
   getClient() {
     return new Durable.Client({
       connection: {
@@ -47,11 +155,17 @@ class Pluck extends MeshOS {
     }});
   }
 
+  /**
+   * @private
+   */
   safeKey(key: string): string {
     return `_${key}`;
   }
 
-  transformArrayToHashes(input: [number, ...Array<string | string[]>]): StringStringType[] {
+  /**
+   * @private
+   */
+  arrayToHash(input: [number, ...Array<string | string[]>]): StringStringType[] {
     const [count, ...rest] = input;
     const max = rest.length / 2
     const hashes: StringStringType[] = [];
@@ -90,12 +204,17 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * mints the Redis HASH key given the entity name and workflowId (jobid). The
+   * Returns the Redis HASH key given an `entity` name and workflow/job. The
    * item identified by this key is a HASH record with multidimensional process
    * data interleaved with the function state data.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {string} workflowId - the workflow id
+   * @param {string} workflowId - the workflow/job id
    * @returns {Promise<string>}
+   * @example
+   * // mint a key
+   * const key = await pluck.mintKey('greeting', '12345');
+   * 
+   * // returns 'hmsh:durable:j:-greeting-12345'
    */
   async mintKey(entity: string, workflowId: string): Promise<string> {
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
@@ -106,16 +225,14 @@ class Pluck extends MeshOS {
   /**
    * Connects a function to the operational data layer.
    * 
-   * @template T The expected return type of the target function for type safety.
+   * @template T The expected return type of the target function.
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {(...args: any[]) => T} target - Function to connect, returns type T.
    * @param {ConnectOptions} [options={}] - Optional. Config options for the connection.
    *                                        If provided and `ttl` is set to 'infinity',
    *                                        the function will be cached indefinitely and
-   *                                        can only be flushed manually (and will ignore
-   *                                        cache settings (including flush) provided
-   *                                        in client calls to `exec`).
+   *                                        can only be flushed/removed by calling `flush`.
    * 
    * @returns {Promise<boolean>} True if connection is successfully established.
    * 
@@ -131,7 +248,7 @@ class Pluck extends MeshOS {
    * // Connect the greet function with the 'greeting' entity.
    * pluck.connect('greeting', greet);
    * 
-   * // Connect durably with a TTL of 'infinity' (all calls cached indefinitely).
+   * // Connect durably with a TTL of 'infinity' (all calls are persisted as workflows).
    * pluck.connect('greeting', greet, { ttl: 'infinity' });
    *
    */
@@ -156,18 +273,18 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * during remote execution, an argument is injected (the last argument)
+   * During remote execution, an argument is injected (the last argument)
    * ths is then used by the 'connect' function to determine if the call
    * is a hook or a exec call. If it is an exec, the connected function has
    * precedence and can say that all calls are cached indefinitely.
    *
    * @param {any[]} args 
-   * @param {Record<string, any>} options 
-   * @param {Record<string, any>} callOptions 
-   * @returns {Record<string, any>}
+   * @param {StringAnyType} options 
+   * @param {StringAnyType} callOptions 
+   * @returns {StringAnyType}
    * @private
    */
-  bindCallOptions(args: any[], options: ConnectOptions, callOptions: CallOptions = {}): Record<string, any>{
+  bindCallOptions(args: any[], options: ConnectOptions, callOptions: CallOptions = {}): StringAnyType{
     if (args.length) {
       const lastArg = args[args.length - 1];
       if (lastArg instanceof Object && lastArg.$type === 'exec') {
@@ -190,7 +307,10 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * sleeps to keep the function open and remain part of the operational data layer
+   * Sleeps to keep the function open and remain part of the operational data layer
+   * 
+   * @template T The expected return type of the remote function
+   * 
    * @param {string} result - the result to emit before going to sleep
    * @param {CallOptions} options - call options
    * @private
@@ -204,7 +324,7 @@ class Pluck extends MeshOS {
         //publish the 'done' payload
         const jobResponse = ['aAa', '/t', 'aBa', `/s${JSON.stringify(result)}`];
         await store.exec('HSET', jobKey, ...jobResponse);
-        await this.publishDone(result, hotMesh, options);
+        await this.publishDone<T>(result, hotMesh, options);
         //job will only exit upon receiving a flush signal
         await Pluck.MeshOS.waitForSignal([`flush-${options.$guid}`])
       } else {
@@ -227,6 +347,8 @@ class Pluck extends MeshOS {
    * to both return the job result to the caller and to sleep to keep
    * the job active.
    * 
+   * @template T The expected return type of the remote function
+   * 
    * @param {string} result - the result to emit before going to sleep
    * @param {HotMesh} hotMesh - call options
    * @param {CallOptions} options - call options
@@ -234,7 +356,7 @@ class Pluck extends MeshOS {
    * @returns {Promise<void>}
    * @private
    */
-  async publishDone(result: any, hotMesh: HotMesh, options: CallOptions): Promise<void> {
+  async publishDone<T>(result: T, hotMesh: HotMesh, options: CallOptions): Promise<void> {
     await hotMesh.engine.store.publish(
       8, 
       {
@@ -265,7 +387,9 @@ class Pluck extends MeshOS {
   /**
    * Flushes a function with a `ttl` of 'infinity'. These entities were
    * likely created by a connect method that was configured with a
-   * `ttl` of 'infinity'.
+   * `ttl` of 'infinity'.It can take several seconds for the function
+   * to be removed from the cache as it might be actively orchestrating
+   * sub-workflows.
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - If a string is provided, it is treated as the
@@ -286,11 +410,12 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * Signals a hook or main function that is sleeping and registered
-   * for the signal matching @guid.
+   * Signals a Hook Function or Main Function to awaken that 
+   * is paused and registered to awaken upon receiving the signal
+   * matching @guid.
    * 
    * @param {string} guid - The global identifier for the signal
-   * @param {Record<string, any>} payload - The payload to send with the signal
+   * @param {StringAnyType} payload - The payload to send with the signal
    * 
    * @returns {Promise<string>} - the signal id
    * @example
@@ -299,12 +424,12 @@ class Pluck extends MeshOS {
    * 
    * // returns '123456732345-0' (redis stream message receipt)
    */
-  async signal(guid: string, payload: Record<string, any>): Promise<string> {
+  async signal(guid: string, payload: StringAnyType): Promise<string> {
     return await this.getClient().workflow.signal(guid, payload);
   }
 
   /**
-   * similar to `exec`, except the workflow is already running and the
+   * Similar to `exec`, except the workflow is already running and the
    * worfklow id (`entity`+`id`) is used to identify the workflow.
    * The target function indentified by `hookEntity` is executed with 
    * `hookArgs` but only augments the existing workflow state and
@@ -313,7 +438,7 @@ class Pluck extends MeshOS {
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {string} hookEntity - the hook entity name (the name used when it was connected)
-   * @param {any[]} hookArgs - the hook arguments
+   * @param {any[]} hookArgs - the arguments to pass to the hook function. Must be JSON serializeable.
    * @param {CallOptions} [options={}] - optional call options
    * @returns {Promise<string>} - the signal id
    * @example
@@ -338,7 +463,7 @@ class Pluck extends MeshOS {
    * Executes a remote function by its global identifier, passing the specified arguments.
    * This method is asynchronous and supports custom execution options.
    * 
-   * @template T The expected return type of the remote function, ensuring type safety.
+   * @template T The expected return type of the remote function
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {any[]} args - If a string is provided, it is treated as the
@@ -363,8 +488,8 @@ class Pluck extends MeshOS {
    * 
    * const response = await pluck.exec(
    *   'greeting', 
-   *   ['jsmith@pluck', { first: 'Jan', last: 'Smith' }],
-   *   { ttl: '15 minutes' }
+   *   ['jsmith@pluck', { first: 'Jan' }],
+   *   { ttl: '15 minutes', id: 'jsmith123' }
    * );
    * 
    * // Assuming the remote function returns a greeting message, the response would be:
@@ -426,7 +551,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * returns the remote function state. this is different than the function respose
+   * Returns the remote function state. this is different than the function respose
    * returned by the `exec` method which represents the return value from the
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set:
@@ -439,7 +564,7 @@ class Pluck extends MeshOS {
    * @param {string} id - the job id
    * @param {CallOptions} [options={}] - optional call options
    * 
-   * @returns {Promise<Record<string, any>>} - the function state
+   * @returns {Promise<StringAnyType>} - the function state
    * 
    * @example
    * // get the state of a function
@@ -447,7 +572,7 @@ class Pluck extends MeshOS {
    * 
    * // returns { fred: 'flintstone', barney: 'rubble' }
    */
-  async get(entity: string, id: string, options: CallOptions = {}): Promise<Record<string, any>>{
+  async get(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType>{
     const workflowId = this.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
@@ -474,8 +599,8 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * returns the remote function state for all fields. NOTE:
-   * this is slightly less efficient than `get` as it returns all
+   * Returns the remote function state for all fields. NOTE:
+   * `all` can be less efficient than calling `get` as it returns all
    * fields (HGETALL), not just the ones requested (HMGET). Depending
    * upon the duration of the workflow, this could represent a large
    * amount of process/history data.
@@ -484,7 +609,7 @@ class Pluck extends MeshOS {
    * @param {string} id - the workflow/job id
    * @param {CallOptions} [options={}] - optional call options
    * 
-   * @returns {Promise<Record<string, any>>} - the function state
+   * @returns {Promise<StringAnyType>} - the function state
    * 
    * @example
    * // get the state of the job (this is not the response...this is job state)
@@ -492,7 +617,7 @@ class Pluck extends MeshOS {
    * 
    * // returns { fred: 'flintstone', barney: 'rubble', ...  }
    */
-  async all(entity: string, id: string, options: CallOptions = {}): Promise<Record<string, any>> {
+  async all(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType> {
     const rawResponse = await this.raw(entity, id, options);
     const responseObj = {};
     for (let key in rawResponse) {
@@ -504,7 +629,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * returns all fields in the HASH record from Redis (HGETALL). Record
+   * Returns all fields in the HASH record from Redis (HGETALL). Record
    * fields include the following:
    * 
    * 1) `:`:                 workflow status (a semaphore where `0` is complete)
@@ -517,7 +642,7 @@ class Pluck extends MeshOS {
    * @param {string} id - the workflow/job id
    * @param {CallOptions} [options={}] - optional call options
    * 
-   * @returns {Promise<Record<string, any>>} - the function state
+   * @returns {Promise<StringAnyType>} - the function state
    * 
    * @example
    * // get the state of a function
@@ -525,7 +650,7 @@ class Pluck extends MeshOS {
    * 
    * // returns { : '0', _barney: 'rubble', aBa: 'Hello, John Doe. Your email is [jdoe@pluck].', ... }
    */
-  async raw(entity: string, id: string, options: CallOptions = {}): Promise<Record<string, any>> {
+  async raw(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType> {
     const workflowId = this.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
@@ -540,7 +665,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * sets the remote function state. this is different that the function respose
+   * Sets the remote function state. this is different that the function respose
    * returned by the exec method which represents the return value from the
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set
@@ -568,7 +693,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * increments a field in the remote function state.
+   * Increments a field in the remote function state.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {string} field - the field name
@@ -591,14 +716,14 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * deletes one or more fields from the remote function state.
+   * Deletes one or more fields from the remote function state.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {CallOptions} [options={}] - optional call options
    * 
    * @returns {Promise<number>} - the count of fields deleted
    * @example
-   * // delete a field from the function state
+   * // remove two hash fields from the function state
    * const count = await pluck.del('greeting', 'jdoe', { fields: ['fred', 'barney'] });
    */
   async del(entity: string, id: string, options: CallOptions): Promise<number>{
@@ -616,7 +741,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * executes the redis FT search query; optionally specify other commands
+   * Executes the redis FT search query; optionally specify other commands
    * @example '@_quantity:[89 89]'
    * @example '@_quantity:[89 89] @_name:"John"'
    * @example 'FT.search my-index @_quantity:[89 89]'
@@ -638,10 +763,11 @@ class Pluck extends MeshOS {
   /**
    * Provides a JSON abstraction for the Redis FT.search command
    * (e.g, `count`, `query`, `return`, `limit`)
+   * NOTE: If the type is TAG for an entity, `.`, `@`, and `-` must be escaped.
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {FindWhereOptions} options 
-   * @returns {Promise<string[] | [number] | Array<string | number | string[]>>}
+   * @returns {Promise<SearchResults | number>} Returns a number if `count` is true, otherwise a SearchResults object.
    * @example
    * const results = await pluck.findWhere('greeting', {
    *  query: [
@@ -656,7 +782,7 @@ class Pluck extends MeshOS {
    * 
    * // returns { count: 1, query: 'FT.SEARCH my-index @_name:"John" @_age:[2 +inf] @_quantity:[89 89] LIMIT 0 10', data: [ { name: 'John', quantity: '89' } ] }
    */
-  async findWhere(entity: string, options: FindWhereOptions): Promise<{count: number, query: string, data: StringStringType[]} | number> {
+  async findWhere(entity: string, options: FindWhereOptions): Promise<SearchResults | number> {
     const args: string[] = [this.generateSearchQuery(options.query)];
     if (options.count) {
       args.push('LIMIT', '0', '0');
@@ -683,12 +809,12 @@ class Pluck extends MeshOS {
     } else if (count === 0) {
       return { count, query: sargs, data: [] };
     }
-    const hashes = this.transformArrayToHashes(FTResults as [number, ...Array<string | string[]>]);
+    const hashes = this.arrayToHash(FTResults as [number, ...Array<string | string[]>]);
     return { count, query: sargs, data: hashes} 
   }
 
   /**
-   * generates a search query from a FindWhereQuery array
+   * Generates a search query from a FindWhereQuery array
    * @param {FindWhereQuery[]} query
    * @returns {string}
    * @private
@@ -725,11 +851,18 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * creates a search index for the specified entity (FT.search)
+   * Creates a search index for the specified entity (FT.search). The index
+   * must be removed by calling `FT.DROP_INDEX` directly in Redis.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {CallOptions} [options={}] - optional call options
    * @param {WorkflowSearchOptions} [searchOptions] - optional search options
    * @returns {Promise<string>} - the search index name
+   * @example
+   * // create a search index for the 'greeting' entity. pass in search options.
+   * const index = await pluck.createSearchIndex('greeting', {}, { prefix: 'greeting', ... });
+   * 
+   * // creates a search index for the 'greeting' entity, using the default search options.
+   * const index = await pluck.createSearchIndex('greeting');
    */
   async createSearchIndex(entity: string, options: CallOptions = {}, searchOptions?: WorkflowSearchOptions): Promise<void> {
     const workflowTopic = `${options.taskQueue ?? entity}-${entity}`;
@@ -738,7 +871,7 @@ class Pluck extends MeshOS {
   }
 
   /**
-   * alias 'proxyActivities' as `once`
+   * Wrap activities in a proxy that will durably run them, once.
    */
   static once = Durable.workflow.proxyActivities;
 };

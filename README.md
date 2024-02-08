@@ -85,7 +85,7 @@ const response = await pluck.flush('greeting', 'jsmith');
 During this time you can bind transactional *Hooks* to extend your function. Hooks are *subordinated-workflows* that run transactionally, with read/write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
 
 ```javascript
-functon greet (email: string, user: { first: string}) {
+function greet (email: string, user: { first: string}) {
   //persist the user's email and newsletter preferences
   const search = await Pluck.MeshOS.search();
   await search.set('email', email, 'newsletter', 'yes');
