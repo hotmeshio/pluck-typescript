@@ -93,7 +93,7 @@ class Pluck extends MeshOS {
    * mints the Redis HASH key given the entity name and workflowId (jobid). The
    * item identified by this key is a HASH record with multidimensional process
    * data interleaved with the function state data.
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} workflowId - the workflow id
    * @returns {Promise<string>}
    */
@@ -108,8 +108,7 @@ class Pluck extends MeshOS {
    * 
    * @template T The expected return type of the target function for type safety.
    * 
-   * @param {string} entity - A global ID for generating stream names and job IDs.
-   *                          Should be concise and descriptive (e.g., 'user').
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {(...args: any[]) => T} target - Function to connect, returns type T.
    * @param {ConnectOptions} [options={}] - Optional. Config options for the connection.
    *                                        If provided and `ttl` is set to 'infinity',
@@ -268,8 +267,7 @@ class Pluck extends MeshOS {
    * likely created by a connect method that was configured with a
    * `ttl` of 'infinity'.
    * 
-   * @param {string} entity - The global identifier for the remote function. Used to
-   *                          specify which function's cache entry is to be flushed.
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - If a string is provided, it is treated as the
    *                      unique job identifier. If an array is provided, it
    *                      represents the arguments passed to the remote 
@@ -312,7 +310,7 @@ class Pluck extends MeshOS {
    * `hookArgs` but only augments the existing workflow state and
    * does not create a new one.
    * 
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {string} hookEntity - the hook entity name (the name used when it was connected)
    * @param {any[]} hookArgs - the hook arguments
@@ -342,9 +340,8 @@ class Pluck extends MeshOS {
    * 
    * @template T The expected return type of the remote function, ensuring type safety.
    * 
-   * @param {string} entity - A global identifier for the remote function, describing
-   *                          what the function is, does, or represents.
-   * @param {any[] | string} argsOrId - If a string is provided, it is treated as the
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
+   * @param {any[]} args - If a string is provided, it is treated as the
    *                                    unique job identifier (and an empty arguments
    *                                    array is assumed). If an array is provided, it
    *                                    represents the arguments passed to the remote 
@@ -404,7 +401,7 @@ class Pluck extends MeshOS {
    * Retrieves the job profile for the function execution, including metadata such as 
    * execution status and result.
    * 
-   * @param {string} entity - The global identifier for the remote function.
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - identifier for the job
    * @param {CallOptions} [options={}] - Optional. Configuration options for the execution,
    *                                     including custom IDs, time-to-live (TTL) settings, etc.
@@ -438,7 +435,7 @@ class Pluck extends MeshOS {
    * 3) during hook execution (await (await new Pluck.MeshOS.search()).set(...))
    * 4) via the pluck SDK (provide name/value pairs and call `this.set`)
    * 
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {CallOptions} [options={}] - optional call options
    * 
@@ -479,11 +476,11 @@ class Pluck extends MeshOS {
   /**
    * returns the remote function state for all fields. NOTE:
    * this is slightly less efficient than `get` as it returns all
-   * fields (HGETALL), not just the ones requested (HMGT). Depending
+   * fields (HGETALL), not just the ones requested (HMGET). Depending
    * upon the duration of the workflow, this could represent a large
    * amount of process/history data.
    * 
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the workflow/job id
    * @param {CallOptions} [options={}] - optional call options
    * 
@@ -516,7 +513,7 @@ class Pluck extends MeshOS {
    * 4) `[a-zA-Z]{3}`:       mutable workflow job state
    * 5) `[a-zA-Z]{3}[,\d]+`: immutable workflow activity state
    * 
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the workflow/job id
    * @param {CallOptions} [options={}] - optional call options
    * 
@@ -548,7 +545,7 @@ class Pluck extends MeshOS {
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set
    * 
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {CallOptions} [options={}] - optional call options
    * 
@@ -572,7 +569,7 @@ class Pluck extends MeshOS {
 
   /**
    * increments a field in the remote function state.
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {string} field - the field name
    * @param {number} amount - the amount to increment
@@ -595,7 +592,7 @@ class Pluck extends MeshOS {
 
   /**
    * deletes one or more fields from the remote function state.
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
    * @param {CallOptions} [options={}] - optional call options
    * 
@@ -642,7 +639,7 @@ class Pluck extends MeshOS {
    * Provides a JSON abstraction for the Redis FT.search command
    * (e.g, `count`, `query`, `return`, `limit`)
    * 
-   * @param {string} entity
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {FindWhereOptions} options 
    * @returns {Promise<string[] | [number] | Array<string | number | string[]>>}
    * @example
@@ -657,7 +654,7 @@ class Pluck extends MeshOS {
    *  return: ['name', 'quantity']
    * });
    * 
-   * // returns [ 'John', 89, 'John', 89, ... ]
+   * // returns { count: 1, query: 'FT.SEARCH my-index @_name:"John" @_age:[2 +inf] @_quantity:[89 89] LIMIT 0 10', data: [ { name: 'John', quantity: '89' } ] }
    */
   async findWhere(entity: string, options: FindWhereOptions): Promise<{count: number, query: string, data: StringStringType[]} | number> {
     const args: string[] = [this.generateSearchQuery(options.query)];
@@ -729,7 +726,7 @@ class Pluck extends MeshOS {
 
   /**
    * creates a search index for the specified entity (FT.search)
-   * @param {string} entity - the entity name
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {CallOptions} [options={}] - optional call options
    * @param {WorkflowSearchOptions} [searchOptions] - optional search options
    * @returns {Promise<string>} - the search index name

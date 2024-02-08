@@ -62,8 +62,11 @@ describe('Pluck`', () => {
     await search?.set('email', email, 'newsletter', 'yes');
 
     //sendNewsletter is a proxy function and will only run once
-    const sent = await sendNewsLetter(email);
-    console.log('sent ONE newsletter to ', email, sent);
+    //prove by calling three times (but using the cached instance for the last 2)
+    for (let i = 1; i < 4; i++) {
+      const cachedI = await sendNewsLetter(email, i);
+      console.log('outgoing count', email, i, cachedI);
+    }
 
     //spawn the `sendRecurringNewsLetter` hook (a parallel subroutine)
     if (email === 'floe.doe@pluck.com') {
@@ -79,6 +82,14 @@ describe('Pluck`', () => {
 
   const localGreet = async (email: string, user: { first: string, last: string}): Promise<string> => {
     return `Hello, ${user.first} ${user.last}. Your email is [${email}].`;
+  }
+
+  const sleeper = async (email: string) => {
+    for (let i = 1; i < 4; i++) {
+      const cachedI = await sendNewsLetter(email, i);
+      //console.log('SLEEPER MISALIGN?', email, i, cachedI);
+      await Pluck.MeshOS.sleep('1 second');
+    }
   }
 
   //once connected by pluc, this function will become a 'hook'
@@ -122,12 +133,15 @@ describe('Pluck`', () => {
     await MeshOS.stopWorkers();
     await Client.shutdown();
     await Worker.shutdown();
-  }, 20_000);
+  }, 30_000);
 
   describe('connect', () => {
     it('should connect a function', async () => {
       const worker = await pluck.connect(entityName, greet);
       expect(worker).toBeDefined();
+
+      const sleeperWorker = await pluck.connect("sleeper", sleeper);
+      expect(sleeperWorker).toBeDefined();
     });
 
     it('should connect a hook function', async () => {
@@ -177,6 +191,12 @@ describe('Pluck`', () => {
       //      data at rest (state data), as both are saved
       //      to the same unidimensional Redis HASH.
     });
+
+    it('should only run proxy functions one time', async () => {
+      //console.log('START SLEEPER ------')
+      await pluck.exec<void>('sleeper', ['sleeper@pluck.com']);
+      //console.log('END SLEEPER --------')
+    }, 20_000);
 
     it('should return RAW fields (HGETALL)', async () => {
       const email = 'jdoe@pluck.com';

@@ -10,6 +10,8 @@ Simplify **service-to-service function calls** with Redis-backed governance. *Pl
 ```sh
 npm install @hotmeshio/pluck
 ```
+## Docs
+[SDK Documentation](https://github.com/hotmeshio/pluck-typescript/tree/main/docs/index.html)
 
 ## Background
 Pluck works by inverting the relationship to Redis: those functions that once used Redis as a cache, are instead *cached and governed* by Redis. This inversion of control is particularly effective at refactoring a legacy code base.
@@ -63,7 +65,7 @@ const response = await pluck.exec(
 ```
 
 ### Execute and Operationalize
-Provide a `ttl` of `infinity` to operationalize the data. It's now a **durable workflow** with all the benefits of Redis-backed governance.
+Provide a `ttl` of `infinity` to operationalize the function. It's now a **durable workflow** with all the benefits of Redis-backed governance.
 
 ```javascript
 const response = await pluck.exec(
@@ -74,13 +76,13 @@ const response = await pluck.exec(
 ```
 
 ## Data in Motion: Operationalize Your Functions
-Pluck does more than routing function calls. Setting the `ttl` to 'infinity' *operationalizes* an ordinary function, converting into a **durable workflow**.  Your functions will run as part of the Redis-backed operational data layer and can only be removed by calling `flush`.
+Pluck does more than route function calls. Setting `ttl` to 'infinity' converts the function into a *durable workflow*. Your function will now run as part of the Redis-backed operational data layer (ODL) and can only be removed by calling `flush`.
 
 ```javascript
 const response = await pluck.flush('greeting', 'jsmith');
 ```
 
-During this time you can bind transactional *Hooks* to extend your function. Hooks are *subroutines* that run as parallel transactions with read and write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
+During this time you can bind transactional *Hooks* to extend your function. Hooks are *subordinated-workflows* that run transactionally, with read/write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
 
 ```javascript
 functon greet (email: string, user: { first: string}) {
@@ -99,17 +101,24 @@ functon greet (email: string, user: { first: string}) {
 }
 ```
 
-**Hooks** are authored as ordinary JavaScript, but since they run as reentrant processes, you can include `Pluck.MeshOS` extensions. This example showcases a few, including one you wouldn't expect: it sends a newsletter and then *sleeps for a month*. Add support for transactionally-backed, recurring subroutines with just a few lines of code.
+This example showcases a few of the workflow extensons available to hooks (like reading from shared state and proxying activities). And it also includes one you wouldn't expect: *it sleeps for a month*. With just a few lines of code, you've operationalized the `greet` function and extended it with a recurring newsletter subscription.
+
+>💡If you are familiar with durable workflow engines like Temporal, you'll recognize the need to wrap (i.e., "proxy") activities, so they run once. Pluck provides the `once` method to do this. Import the module where your legacy activitiy is located (for this example, let's assume it emails the newsletter). What's important is that it is wrapped, so it only ever gets called *one time* during the life of the workflow.
 
 ```javascript
+import Pluck from '@hotmeshio/pluck';
+import * as activities from './activities';
+
+//wrap/proxy the legacy activity (so it runs once)
+const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
 
 const sendNewsLetter = async () => {
   const search = await Pluck.MeshOS.search();
-  do {
+  while (await search.get('newsletter') === 'yes') {
     const email = await search.get('email');
-    console.log('call your newsletter service =>', email);
+    await sendNewsLetter(email); //proxy the activity
     await Pluck.MeshOS.sleep('1 month');
-  } while(await search.get('newsletter') === 'yes');
+  }
 }
 
 //connect the hook to the operational data layer
@@ -128,7 +137,6 @@ pluck.connect('newsletter.unsubscribe', async (reason) => {
 ```
 
 Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer). It can also be called from within your connected functions or inside another hook. Pass arguments to the hook as shown here (reason).
-
 
 ```javascript
 await pluck.hook('greeting', 'jsmith123', 'newsletter.unsubscribe', ['user-requested-reason']);
