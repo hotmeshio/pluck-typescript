@@ -11,7 +11,7 @@ Simplify **service-to-service function calls** with Redis-backed governance. *Pl
 npm install @hotmeshio/pluck
 ```
 ## Docs
-[SDK Documentation](https://github.com/hotmeshio/pluck-typescript/tree/main/docs/index.html)
+[SDK Documentation](https://github.com/hotmeshio/pluck-typescript)
 
 ## Background
 Pluck works by inverting the relationship to Redis: those functions that once used Redis as a cache, are instead *cached and governed* by Redis. This inversion of control is particularly effective at refactoring a legacy code base.
