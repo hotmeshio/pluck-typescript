@@ -112,7 +112,7 @@ import * as activities from './activities';
 //wrap/proxy the legacy activity (so it runs once)
 const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
 
-const sendNewsLetter = async () => {
+const newsLetter = async () => {
   const search = await Pluck.MeshOS.search();
   while (await search.get('newsletter') === 'yes') {
     const email = await search.get('email');
@@ -121,8 +121,8 @@ const sendNewsLetter = async () => {
   }
 }
 
-//connect the hook to the operational data layer
-//the alias (newsletter.subscribe) is used to identify the hook
+//connect the hook function to the operational data layer
+//callers will use this `newsletter.subscribe` entity name to invoke
 pluck.connect('newsletter.subscribe', newsLetter);
 ```
 
