@@ -24,7 +24,7 @@
   },
   "keywords": ["service mesh", "durable workflow", "redis", "operational data", "hotmesh"],
   "author": "luke.birdeau@gmail.com",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "Apache-2.0",
   "dependencies": {
     "@hotmeshio/hotmesh": "^0.0.30",
     "ms": "^2.1.3",
