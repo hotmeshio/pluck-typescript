@@ -90,10 +90,9 @@ function greet (email: string, user: { first: string}) {
   const search = await Pluck.Workflow.search();
   await search.set('email', email, 'newsletter', 'yes');
 
-  //set up a recurring newsletter subscription using a 'hook'
+  //hook into the 'newsletter.subscribe' function
   await Pluck.Workflow.hook({
-    workflowName: 'newsletter.subscribe',
-    taskQueue: 'newsletter.subscribe',
+    entity: 'newsletter.subscribe',
     args: []
   });
 
@@ -112,6 +111,7 @@ import * as activities from './activities';
 //wrap/proxy the legacy activity (so it runs once)
 const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
 
+//declare the hook function (newsletter.subscribe)
 const newsLetter = async () => {
   const search = await Pluck.Workflow.search();
   while (await search.get('newsletter') === 'yes') {
@@ -121,8 +121,7 @@ const newsLetter = async () => {
   }
 }
 
-//connect the hook function to the operational data layer
-//callers will use this `newsletter.subscribe` entity name to invoke
+//connect the hoo function as 'newsletter.subscribe'
 pluck.connect('newsletter.subscribe', newsLetter);
 ```
 
