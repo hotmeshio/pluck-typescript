@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/pluck",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Operationalize Your Data",
   "main": "build/index.js",
   "types": "build/index.d.ts",
