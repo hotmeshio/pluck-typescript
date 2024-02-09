@@ -69,10 +69,9 @@ class Pluck {
   search: WorkflowSearchOptions;
 
   /**
-   * Provides a set of static
-   * workflow extensions that can be included in
-   * a durable workflow. These include the static methods
-   * like `sleep`, `signal`, `hook`, `executeChild`, etc.
+   * Provides a set of static extensions that can be included in
+   * any functon that is connected to the operational data layer
+   * (ODL) using `Pluck.connect`.
    * @example
    * // A durable function using various Pluck.MeshOS methods
    * function greet (email: string, user: { first: string}) {
@@ -90,7 +89,18 @@ class Pluck {
    *   return `Hello, ${user.first}. Your email is [${email}].`;
    * }
    */
-  static MeshOS = MeshOS.MeshOS;
+  static Workflow = {
+    sleep: Durable.workflow.sleep,
+    signal: Durable.workflow.signal,
+    hook: Durable.workflow.hook,
+    executeChild: Durable.workflow.executeChild,
+    waitForSignal: Durable.workflow.waitForSignal,
+    startChild: Durable.workflow.startChild,
+    getHotMesh: Durable.workflow.getHotMesh,
+    random: Durable.workflow.random,
+    search: Durable.workflow.search,
+    getContext: Durable.workflow.getContext,
+  };
 
   /**
    * 
@@ -317,7 +327,7 @@ class Pluck {
    */
   async pauseForTTL<T>(result: T, options: CallOptions) {
     if (options?.ttl && options.$type === 'exec') {
-      const hotMesh = await Pluck.MeshOS.getHotMesh();
+      const hotMesh = await Pluck.Workflow.getHotMesh();
       const store = hotMesh.engine.store;
       const jobKey = store.mintKey(3, { jobId: options.$guid, appId: hotMesh.engine.appId });
       if (options.ttl === 'infinity') {
@@ -326,7 +336,7 @@ class Pluck {
         await store.exec('HSET', jobKey, ...jobResponse);
         await this.publishDone<T>(result, hotMesh, options);
         //job will only exit upon receiving a flush signal
-        await Pluck.MeshOS.waitForSignal([`flush-${options.$guid}`])
+        await Pluck.Workflow.waitForSignal([`flush-${options.$guid}`])
       } else {
         //the job is over; change the expires time to self-erase
         const seconds = ms(options.ttl) / 1000;

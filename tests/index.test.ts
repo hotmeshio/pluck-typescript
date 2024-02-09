@@ -58,7 +58,7 @@ describe('Pluck`', () => {
     }
 
     //set some shared state using 'search'
-    const search = await Pluck.MeshOS.search();
+    const search = await Pluck.Workflow.search();
     await search?.set('email', email, 'newsletter', 'yes');
 
     //sendNewsletter is a proxy function and will only run once
@@ -70,7 +70,7 @@ describe('Pluck`', () => {
 
     //spawn the `sendRecurringNewsLetter` hook (a parallel subroutine)
     if (email === 'floe.doe@pluck.com') {
-      const msgId = await Pluck.MeshOS.hook({
+      const msgId = await Pluck.Workflow.hook({
         args: [],
         workflowName: 'subscribe',
         taskQueue: 'subscribe',
@@ -88,7 +88,7 @@ describe('Pluck`', () => {
     for (let i = 1; i < 4; i++) {
       const cachedI = await sendNewsLetter(email, i);
       //console.log('SLEEPER MISALIGN?', email, i, cachedI);
-      await Pluck.MeshOS.sleep('1 second');
+      await Pluck.Workflow.sleep('1 second');
     }
   }
 
@@ -97,7 +97,7 @@ describe('Pluck`', () => {
   //state its bound to when initialized.
   const sendRecurringNewsLetter = async () => {
     //access shared state using the 'search' object
-    const search = await Pluck.MeshOS.search();
+    const search = await Pluck.Workflow.search();
     let email: string;
     let shouldProceed: boolean;
     do {
@@ -116,7 +116,7 @@ describe('Pluck`', () => {
 
   //another hook function to unsubscribe from the newsletter
   const unsubscribeFromNewsLetter = async (reason: string) => {
-    const search = await Pluck.MeshOS.search();
+    const search = await Pluck.Workflow.search();
     const email = await search.get('email');
     console.log('hook running; unsubscribe? >', email, 'no', reason);
     await search.set('newsletter', 'no', 'reason', reason);

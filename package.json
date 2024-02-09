@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/pluck",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Operationalize Your Data",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -26,7 +26,7 @@
   "author": "luke.birdeau@gmail.com",
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
-    "@hotmeshio/hotmesh": "^0.0.29",
+    "@hotmeshio/hotmesh": "^0.0.30",
     "ms": "^2.1.3",
     "nanoid": "^3.3.6"
   },

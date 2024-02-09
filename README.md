@@ -87,11 +87,11 @@ During this time you can bind transactional *Hooks* to extend your function. Hoo
 ```javascript
 function greet (email: string, user: { first: string}) {
   //persist the user's email and newsletter preferences
-  const search = await Pluck.MeshOS.search();
+  const search = await Pluck.Workflow.search();
   await search.set('email', email, 'newsletter', 'yes');
 
   //set up a recurring newsletter subscription using a 'hook'
-  await Pluck.MeshOS.hook({
+  await Pluck.Workflow.hook({
     workflowName: 'newsletter.subscribe',
     taskQueue: 'newsletter.subscribe',
     args: []
@@ -113,11 +113,11 @@ import * as activities from './activities';
 const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
 
 const newsLetter = async () => {
-  const search = await Pluck.MeshOS.search();
+  const search = await Pluck.Workflow.search();
   while (await search.get('newsletter') === 'yes') {
     const email = await search.get('email');
     await sendNewsLetter(email); //proxy the activity
-    await Pluck.MeshOS.sleep('1 month');
+    await Pluck.Workflow.sleep('1 month');
   }
 }
 
@@ -130,7 +130,7 @@ Cancelling the subscription is equally straightforward: create and connect a fun
 
 ```javascript
 pluck.connect('newsletter.unsubscribe', async (reason) => {
-  const search = await Pluck.MeshOS.search();
+  const search = await Pluck.Workflow.search();
   //update and save the reason
   await search.set('newsletter', 'no', 'reason', reason);
 });

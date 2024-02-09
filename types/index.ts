@@ -5,6 +5,37 @@ export type ConnectOptions = {
 
 export type SearchResults = {count: number, query: string, data: StringStringType[]};
 
+export type WorkflowContext = {
+  /**
+   * the reentrant semaphore, incremented in real-time as idempotent statements are re-traversed upon reentry. Indicates the current semaphore count.
+   */
+  counter: number;
+  /**
+   * the HotMesh App namespace. `durable` is the default.
+   */
+  namespace: string;
+  /**
+   * the workflow/job ID
+   */
+  workflowId: string;
+  /**
+   * the dimensional isolation for the reentrant hook, expressed in the format `0,0`, `0,1`, etc
+   */
+  workflowDimension: string;
+  /**
+   * a concatenation of the task queue and workflow name (e.g., `${taskQueueName}-${workflowName}`)
+   */
+  workflowTopic: string;
+  /**
+   * the open telemetry trace context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
+   */
+  workflowTrace: string;
+  /**
+   * the open telemetry span context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
+   */
+  workflowSpan: string;
+};
+
 export type WorkflowSearchOptions = {
   index?: string;         //FT index name (myapp:myindex)
   prefix?: string[];      //FT prefixes (['myapp:myindex:prefix1', 'myapp:myindex:prefix2'])
@@ -16,6 +47,7 @@ export type WorkflowOptions = {
   namespace?: string;
   taskQueue: string;
   args: any[];
+  prefix?: string;
   workflowId?: string;
   workflowName?: string;
   parentWorkflowId?: string;
