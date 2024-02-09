@@ -695,7 +695,7 @@ class Pluck {
   }
 
   /**
-   * Sets the remote function state. this is different that the function respose
+   * Sets the remote function state. this is different than the function respose
    * returned by the exec method which represents the return value from the
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set

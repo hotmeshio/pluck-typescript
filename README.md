@@ -34,8 +34,8 @@ import Pluck from '@hotmeshio/pluck'
 
 const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
 
-const greet = (email: string, user: { first: string}) => {
-  return `Hello, ${user.first}. Your email is [${email}].`;
+const greet = (email: string, first: string) => {
+  return `Welcome, ${first}.`;
 }
 
 pluck.connect('greeting', greet);
@@ -49,8 +49,8 @@ import Redis from 'ioredis';
 import Pluck from '@hotmeshio/pluck'
 
 const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
-const response = await pluck.exec('greeting', ['jsmith@pluck', {first: 'Jan'}]);
-//returns 'Hello, Jan. Your email is [jsmith@pluck].'
+const response = await pluck.exec('greeting', ['jsmith@pluck', 'Jan']);
+//returns 'Welcome, Jan.'
 ```
 
 ### Execute and Cache
@@ -59,7 +59,7 @@ Provide an `id` and `ttl` flag in the format `1 minute`, `2 weeks`, `3 months`, 
 ```javascript
 const response = await pluck.exec(
   'greeting',
-  ['jsmith@pluck', {first: 'Jan'}],
+  ['jsmith@pluck', 'Jan'],
   { id: 'jsmith', ttl: '15 minutes'}
 );
 ```
@@ -70,7 +70,7 @@ Provide a `ttl` of `infinity` to operationalize the function. It's now a **durab
 ```javascript
 const response = await pluck.exec(
   'greeting',
-  ['jsmith@pluck', {first: 'Jan'}],
+  ['jsmith@pluck', 'Jan'],
   { id: 'jsmith', ttl: 'infinity'}
 );
 ```
@@ -82,27 +82,29 @@ Pluck does more than route function calls. Setting `ttl` to 'infinity' converts 
 const response = await pluck.flush('greeting', 'jsmith');
 ```
 
-During this time you can bind transactional *Hooks* to extend your function. Hooks are *subordinated-workflows* that run transactionally, with read/write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
+During this time you can bind *Hooks* to extend your function. Hooks are *subordinated-workflows* that run transactionally, with read/write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
 
 ```javascript
-function greet (email: string, user: { first: string}) {
-  //persist the user's email and newsletter preferences
+function greet (email: string, first: string) {
+  //persist user data via `Worflow.search`
   const search = await Pluck.Workflow.search();
   await search.set('email', email, 'newsletter', 'yes');
 
-  //hook into the 'newsletter.subscribe' function
+  //kick off a recurring subflow using `Workflow.hook`
   await Pluck.Workflow.hook({
     entity: 'newsletter.subscribe',
     args: []
   });
 
-  return `Hello, ${user.first}. Your email is [${email}].`;
+  //welcome the user as before
+  return `Welcome, ${user.first}.`;
 }
 ```
 
-This example showcases a few of the workflow extensons available to hooks (like reading from shared state and proxying activities). And it also includes one you wouldn't expect: *it sleeps for a month*. With just a few lines of code, you've operationalized the `greet` function and extended it with a recurring newsletter subscription.
+### Hooks
+The `newsLetter` hook function shows a few additional workflow extensions. It uses the `search` method to access the user's email and the `once` method to wrap a legacy activity (e.g., `sendNewsLetter`). It also includes a method you wouldn't expect: *it sleeps for a month*. Becuase functions run as *reentrant process*, sleeping is a natural part of the workflow. 
 
->💡If you are familiar with durable workflow engines like Temporal, you'll recognize the need to wrap (i.e., "proxy") activities, so they run once. Pluck provides the `once` method to do this. Import the module where your legacy activitiy is located (for this example, let's assume it emails the newsletter). What's important is that it is wrapped, so it only ever gets called *one time* during the life of the workflow.
+*Set up recurring workflows without reliance on external schedulers and cron jobs.*
 
 ```javascript
 import Pluck from '@hotmeshio/pluck';
@@ -111,35 +113,110 @@ import * as activities from './activities';
 //wrap/proxy the legacy activity (so it runs once)
 const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
 
-//declare the hook function (newsletter.subscribe)
 const newsLetter = async () => {
+  //read user data via `Worflow.search`
   const search = await Pluck.Workflow.search();
   while (await search.get('newsletter') === 'yes') {
     const email = await search.get('email');
-    await sendNewsLetter(email); //proxy the activity
+    
+    //send legacy functions once via `Pluck.once`
+    await sendNewsLetter(email);
+
+    //sleep for a month via `Worflow.sleep`
     await Pluck.Workflow.sleep('1 month');
   }
 }
 
-//connect the hoo function as 'newsletter.subscribe'
+//register the hook function
 pluck.connect('newsletter.subscribe', newsLetter);
 ```
+
+>💡If you are familiar with durable workflow engines like Temporal, you'll recognize the need to wrap (i.e., "proxy") activities, so they run *once*. Pluck provides the `once` method to do this. What's important is that it is wrapped, so it only ever gets called *one time* during the life of the workflow.
 
 Cancelling the subscription is equally straightforward: create and connect a function that sets `newsletter` to 'no'.
 
 ```javascript
 pluck.connect('newsletter.unsubscribe', async (reason) => {
+  //update preferences and provide a reason via `Worflow.search`
   const search = await Pluck.Workflow.search();
-  //update and save the reason
   await search.set('newsletter', 'no', 'reason', reason);
 });
 ```
 
-Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer). It can also be called from within your connected functions or inside another hook. Pass arguments to the hook as shown here (reason).
+Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer).
 
 ```javascript
 await pluck.hook('greeting', 'jsmith123', 'newsletter.unsubscribe', ['user-requested-reason']);
 ```
+
+### Workflow Extensions
+Workflow extension methods are available to your operationalized functions.
+
+ - `waitForSignal` Pause your function and wait for external event(s) before continuing. The *waitForSignal* method will collate and cache the signals and only awaken your function once all signals have arrived.
+   ```javascript
+    const signals = [a, b] = await Pluck.Workflow.waitForSignal('sig1', 'sig2')` 
+    ```
+ - `signal` Send a signal (and optional payload) to a paused function awaiting the signal.
+    ```javascript
+      await Pluck.Workflow.signal('sig1', {payload: 'hi!'});
+    ```
+ - `hook` Redis governance converts your functions into 're-entrant processes'. Optionally use the *hook* method to spawn parallel execution threads to augment a running workflow.
+    ```javascript
+    await Pluck.Workflow.hook({
+      entity: 'newsletter.subscribe',
+      args: []
+    });
+    ```
+ - `sleep` Pause function execution for a ridiculous amount of time (months, years, etc). There's no risk of information loss, as Redis governs function state. When your function awakens, function state is efficiently (and automatically) restored and your function will resume right where it left off.
+    ```javascript
+    await Pluck.Workflow.sleep('1 month');
+    ```
+ - `random` Generate a deterministic random number that can be used in a reentrant process workflow (replaces `Math.random()`).
+    ```javascript
+    const random = await Pluck.Workflow.random();
+    ```
+ - `executeChild` Call another durable function and await the response. *Design sophisticated, multi-process solutions by leveraging this command.*
+    ```javascript
+    const jobResponse = await Pluck.Workflow.executeChild({
+      entity: 'bill',
+      args: [{ id, user_id, plan, cycle, amount, discount }],
+    });
+    ```
+ - `startChild` Call another durable function, but do not await the response.
+    ```javascript
+    const jobId = await Pluck.Workflow.startChild({
+      entity: 'bill',
+      args: [{ id, user_id, plan, cycle, amount, discount }],
+    });
+    ```
+ - `search` Instance a search session
+    ```javascript
+    const search = await Pluck.Workflow.search();
+    ```
+    - `set` Set one or more name/value pairs
+      ```javascript
+      await search.set('name1', 'value1', 'name2', 'value2');
+      ```
+    - `get` Get a single value by name
+      ```javascript
+      const value = await search.get('name');
+      ```
+    - `mget` Get multiple values by name
+      ```javascript
+      const values = await search.mget('name1', 'name2');
+      ```
+    - `del` Delete one or more entries by name and return the number deleted
+      ```javascript
+      const count = await search.del('name1', 'name2');
+      ```
+    - `incr` Increment (or decrement) a number
+      ```javascript
+      const value = await search.incr('name', 12);
+      ```
+    - `mult` Multiply a number
+      ```javascript
+      const value = await search.mult('name', 12);
+      ```
 
 ## Build and Test
 The source files include a docker-compose that spins up one Redis instance and one Node instance. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
