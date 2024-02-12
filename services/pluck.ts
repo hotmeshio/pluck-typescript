@@ -1,8 +1,5 @@
 import ms from 'ms';
-import { nanoid } from 'nanoid';
-import { HotMesh, MeshOS, Durable } from '@hotmeshio/hotmesh';
-//NOTE: Version 0.0.30 of the HotMesh package will expose this directly
-import { Search } from '@hotmeshio/hotmesh/build/services/durable/search';
+import { Durable, HotMesh, MeshOS } from '@hotmeshio/hotmesh';
 import {
   ConnectOptions,
   CallOptions,
@@ -89,8 +86,9 @@ class Pluck {
    *   return `Hello, ${user.first}. Your email is [${email}].`;
    * }
    */
-  static Workflow = {
-    sleep: Durable.workflow.sleep,
+  static workflow = {
+    sleep: Durable.workflow.sleepFor,
+    sleepFor: Durable.workflow.sleepFor,
     signal: Durable.workflow.signal,
     hook: Durable.workflow.hook,
     executeChild: Durable.workflow.executeChild,
@@ -100,6 +98,8 @@ class Pluck {
     random: Durable.workflow.random,
     search: Durable.workflow.search,
     getContext: Durable.workflow.getContext,
+    proxyActivities: Durable.workflow.proxyActivities,
+    once: Durable.workflow.proxyActivities,
   };
 
   /**
@@ -204,7 +204,7 @@ class Pluck {
     if (!id && !entity) {
       throw "Invalid arguments [entity and id are both null]";
     } else if (!id) {
-      id = nanoid();
+      id = HotMesh.guid();
     } else if (entity) {
       entity = `${entity}-`;
     } else {
@@ -327,7 +327,7 @@ class Pluck {
    */
   async pauseForTTL<T>(result: T, options: CallOptions) {
     if (options?.ttl && options.$type === 'exec') {
-      const hotMesh = await Pluck.Workflow.getHotMesh();
+      const hotMesh = await Pluck.workflow.getHotMesh();
       const store = hotMesh.engine.store;
       const jobKey = store.mintKey(3, { jobId: options.$guid, appId: hotMesh.engine.appId });
       if (options.ttl === 'infinity') {
@@ -336,7 +336,7 @@ class Pluck {
         await store.exec('HSET', jobKey, ...jobResponse);
         await this.publishDone<T>(result, hotMesh, options);
         //job will only exit upon receiving a flush signal
-        await Pluck.Workflow.waitForSignal([`flush-${options.$guid}`])
+        await Pluck.workflow.waitForSignal([`flush-${options.$guid}`])
       } else {
         //the job is over; change the expires time to self-erase
         const seconds = ms(options.ttl) / 1000;
@@ -897,7 +897,7 @@ class Pluck {
   async createSearchIndex(entity: string, options: CallOptions = {}, searchOptions?: WorkflowSearchOptions): Promise<void> {
     const workflowTopic = `${options.taskQueue ?? entity}-${entity}`;
     const hotMeshClient = await this.getClient().getHotMeshClient(workflowTopic);
-    return await Search.configureSearchIndex(hotMeshClient, searchOptions ?? this.search);
+    return await Durable.Search.configureSearchIndex(hotMeshClient, searchOptions ?? this.search);
   }
 
   /**

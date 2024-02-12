@@ -86,12 +86,12 @@ During this time you can bind *Hooks* to extend your function. Hooks are *subord
 
 ```javascript
 function greet (email: string, first: string) {
-  //persist user data via `Worflow.search`
-  const search = await Pluck.Workflow.search();
+  //persist user data via `workflow.search`
+  const search = await Pluck.workflow.search();
   await search.set('email', email, 'newsletter', 'yes');
 
-  //kick off a recurring subflow using `Workflow.hook`
-  await Pluck.Workflow.hook({
+  //kick off a recurring subflow using `workflow.hook`
+  await Pluck.workflow.hook({
     entity: 'newsletter.subscribe',
     args: []
   });
@@ -115,15 +115,15 @@ const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
 
 const newsLetter = async () => {
   //read user data via `Worflow.search`
-  const search = await Pluck.Workflow.search();
+  const search = await Pluck.workflow.search();
   while (await search.get('newsletter') === 'yes') {
     const email = await search.get('email');
     
-    //send legacy functions once via `Pluck.once`
+    //send legacy functions ONCE via `Pluck.once`
     await sendNewsLetter(email);
 
-    //sleep for a month via `Worflow.sleep`
-    await Pluck.Workflow.sleep('1 month');
+    //sleep durably using `Worflow.sleepFor`
+    await Pluck.workflow.sleepFor('1 month');
   }
 }
 
@@ -138,7 +138,7 @@ Cancelling the subscription is equally straightforward: create and connect a fun
 ```javascript
 pluck.connect('newsletter.unsubscribe', async (reason) => {
   //update preferences and provide a reason via `Worflow.search`
-  const search = await Pluck.Workflow.search();
+  const search = await Pluck.workflow.search();
   await search.set('newsletter', 'no', 'reason', reason);
 });
 ```
@@ -154,44 +154,44 @@ Workflow extension methods are available to your operationalized functions.
 
  - `waitForSignal` Pause your function and wait for external event(s) before continuing. The *waitForSignal* method will collate and cache the signals and only awaken your function once all signals have arrived.
    ```javascript
-    const signals = [a, b] = await Pluck.Workflow.waitForSignal('sig1', 'sig2')` 
+    const signals = [a, b] = await Pluck.workflow.waitForSignal('sig1', 'sig2')` 
     ```
  - `signal` Send a signal (and optional payload) to a paused function awaiting the signal.
     ```javascript
-      await Pluck.Workflow.signal('sig1', {payload: 'hi!'});
+      await Pluck.workflow.signal('sig1', {payload: 'hi!'});
     ```
  - `hook` Redis governance converts your functions into 're-entrant processes'. Optionally use the *hook* method to spawn parallel execution threads to augment a running workflow.
     ```javascript
-    await Pluck.Workflow.hook({
+    await Pluck.workflow.hook({
       entity: 'newsletter.subscribe',
       args: []
     });
     ```
- - `sleep` Pause function execution for a ridiculous amount of time (months, years, etc). There's no risk of information loss, as Redis governs function state. When your function awakens, function state is efficiently (and automatically) restored and your function will resume right where it left off.
+ - `sleepFor` Pause function execution for a ridiculous amount of time (months, years, etc). There's no risk of information loss, as Redis governs function state. When your function awakens, function state is efficiently (and automatically) restored and your function will resume right where it left off.
     ```javascript
-    await Pluck.Workflow.sleep('1 month');
+    await Pluck.workflow.sleepFor('1 month');
     ```
  - `random` Generate a deterministic random number that can be used in a reentrant process workflow (replaces `Math.random()`).
     ```javascript
-    const random = await Pluck.Workflow.random();
+    const random = await Pluck.workflow.random();
     ```
  - `executeChild` Call another durable function and await the response. *Design sophisticated, multi-process solutions by leveraging this command.*
     ```javascript
-    const jobResponse = await Pluck.Workflow.executeChild({
+    const jobResponse = await Pluck.workflow.executeChild({
       entity: 'bill',
       args: [{ id, user_id, plan, cycle, amount, discount }],
     });
     ```
  - `startChild` Call another durable function, but do not await the response.
     ```javascript
-    const jobId = await Pluck.Workflow.startChild({
+    const jobId = await Pluck.workflow.startChild({
       entity: 'bill',
       args: [{ id, user_id, plan, cycle, amount, discount }],
     });
     ```
  - `search` Instance a search session
     ```javascript
-    const search = await Pluck.Workflow.search();
+    const search = await Pluck.workflow.search();
     ```
     - `set` Set one or more name/value pairs
       ```javascript
@@ -203,7 +203,7 @@ Workflow extension methods are available to your operationalized functions.
       ```
     - `mget` Get multiple values by name
       ```javascript
-      const values = await search.mget('name1', 'name2');
+      const [val1, val2] = await search.mget('name1', 'name2');
       ```
     - `del` Delete one or more entries by name and return the number deleted
       ```javascript
