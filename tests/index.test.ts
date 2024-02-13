@@ -7,7 +7,6 @@ import { JobOutput } from '@hotmeshio/hotmesh/build/types/job';
 import { StringStringType, WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
 
 describe('Pluck`', () => {
-  const { Client, Worker } = Durable;
   const options = {
     socket: {
       host: config.REDIS_HOST,
@@ -125,15 +124,12 @@ describe('Pluck`', () => {
 
   beforeAll(async () => {
     // init Redis and flush db
-    // const redisConnection = await RedisConnection.connect(nanoid(), Redis, options);
-    // redisConnection.getClient().flushDb();
   });
 
   afterAll(async () => {
-    await MeshOS.stopWorkers();
-    await Client.shutdown();
-    await Worker.shutdown();
+    await Pluck.shutdown();
   }, 30_000);
+    
 
   describe('connect', () => {
     it('should connect a function', async () => {

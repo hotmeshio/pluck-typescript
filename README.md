@@ -30,7 +30,7 @@ Connect and expose target functions. Here the `greet` function is registered as 
 
 ```javascript
 import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
-import Pluck from '@hotmeshio/pluck'
+import { Pluck } from '@hotmeshio/pluck'
 
 const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
 
@@ -46,7 +46,7 @@ Call connected functions from anywhere on the network with a connection to Redis
 
 ```javascript
 import Redis from 'ioredis';
-import Pluck from '@hotmeshio/pluck'
+import { Pluck } from '@hotmeshio/pluck'
 
 const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
 const response = await pluck.exec('greeting', ['jsmith@pluck', 'Jan']);
@@ -107,7 +107,7 @@ The `newsLetter` hook function shows a few additional workflow extensions. It us
 *Set up recurring workflows without reliance on external schedulers and cron jobs.*
 
 ```javascript
-import Pluck from '@hotmeshio/pluck';
+import { Pluck } from '@hotmeshio/pluck';
 import * as activities from './activities';
 
 //wrap/proxy the legacy activity (so it runs once)

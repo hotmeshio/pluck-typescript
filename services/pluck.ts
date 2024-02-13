@@ -29,10 +29,17 @@ class Pluck {
    * @example
    * // Instantiate Pluck with an `ioredis` configuration.
    * import Redis from 'ioredis';
-   * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379});
-   * 
+   *
+   * const pluck = new Pluck(Redis, {
+   *   host: 'localhost',
+   *   port: 6379,
+   *   password: 'shhh123',
+   *   db: 0,
+   * });
+   *
    * // Instantiate Pluck with 'redis' configuration
    * import * as Redis from 'redis';
+   *
    * const pluck = new Pluck(Redis, {
    *  socket: {
    *   host: 'localhost',
@@ -70,14 +77,14 @@ class Pluck {
    * any functon that is connected to the operational data layer
    * (ODL) using `Pluck.connect`.
    * @example
-   * // A durable function using various Pluck.MeshOS methods
+   * // A durable function using various Pluck.workflow methods
    * function greet (email: string, user: { first: string}) {
    *   //persist the user's email and newsletter preferences
-   *   const search = await Pluck.MeshOS.search();
+   *   const search = await Pluck.workflow.search();
    *   await search.set('email', email, 'newsletter', 'yes');
 
    *   //set up a recurring newsletter subscription using a 'hook'
-   *   await Pluck.MeshOS.hook({
+   *   await Pluck.workflow.hook({
    *     workflowName: 'newsletter.subscribe',
    *     taskQueue: 'newsletter.subscribe',
    *     args: []
@@ -111,10 +118,17 @@ class Pluck {
    * @example
    * // Instantiate Pluck with an `ioredis` configuration.
    * import Redis from 'ioredis';
-   * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379});
+   * 
+   * const pluck = new Pluck(Redis, {
+   *   host: 'localhost',
+   *   port: 6379,
+   *   password: 'shhh123',
+   *   db: 0,
+   * });
    * 
    * // Instantiate Pluck with 'redis' configuration
    * import * as Redis from 'redis';
+   * 
    * const pluck = new Pluck(Redis, {
    *  socket: {
    *   host: 'localhost',
@@ -396,22 +410,16 @@ class Pluck {
 
   /**
    * Flushes a function with a `ttl` of 'infinity'. These entities were
-   * likely created by a connect method that was configured with a
-   * `ttl` of 'infinity'.It can take several seconds for the function
+   * created by a connect method that was configured with a
+   * `ttl` of 'infinity'. It can take several seconds for the function
    * to be removed from the cache as it might be actively orchestrating
    * sub-workflows.
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {string} id - If a string is provided, it is treated as the
-   *                      unique job identifier. If an array is provided, it
-   *                      represents the arguments passed to the remote 
-   *                      function, AND (the id will be explicitly provided
-   *                      by `options.id` OR a GUID will be deterministically
-   *                      generated based on the arguments using a hash).
-   *                      If `options.id` is provided, it is ALWAYS used as the id.
+   * @param {string} id - The workflow/job id
    * 
    * @example
-   * // Flush a function's cache entry using a job ID
+   * // Flush a function
    * await pluck.flush('greeting', '12345');
    */
   async flush(entity: string, id: string): Promise<string> {
@@ -476,14 +484,7 @@ class Pluck {
    * @template T The expected return type of the remote function
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {any[]} args - If a string is provided, it is treated as the
-   *                                    unique job identifier (and an empty arguments
-   *                                    array is assumed). If an array is provided, it
-   *                                    represents the arguments passed to the remote 
-   *                                    function, AND (the id will be explicitly provided
-   *                                    by `options.id` OR a GUID will be deterministically
-   *                                    generated based on the arguments using a hash).
-   *                                    If `options.id` is provided, it is ALWAYS used as the id.
+   * @param {any[]} args - The arguments passed to the remote function.
    * @param {CallOptions} [options={}] - Optional. Configuration options for the execution,
    *                                     including custom IDs, time-to-live (TTL) settings, etc.
    *                                     Defaults to an empty object if not provided.
@@ -586,8 +587,8 @@ class Pluck {
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set:
    * 1) when the record is first created (provide `options.search.data` to `exec`)
-   * 2) during function (await (await new Pluck.MeshOS.search()).set(...))
-   * 3) during hook execution (await (await new Pluck.MeshOS.search()).set(...))
+   * 2) during function (await (await new Pluck.workflow.search()).set(...))
+   * 3) during hook execution (await (await new Pluck.workflow.search()).set(...))
    * 4) via the pluck SDK (provide name/value pairs and call `this.set`)
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
@@ -904,6 +905,13 @@ class Pluck {
    * Wrap activities in a proxy that will durably run them, once.
    */
   static once = Durable.workflow.proxyActivities;
+
+  /**
+   * shut down Pluck (typically on sigint or sigterm)
+   */
+  static async shutdown() {
+    await Durable.shutdown();
+  }
 };
 
 export { Pluck, Durable, HotMesh, MeshOS };
