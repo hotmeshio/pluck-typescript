@@ -218,6 +218,52 @@ Workflow extension methods are available to your operationalized functions.
       const value = await search.mult('name', 12);
       ```
 
+## Search
+Pluck helps manage workflow state, by providing search extensions like `get`, `set`, and `del` to your operationalized functions. In addition, for those Redis backends with the *RediSearch* module enabled, Pluck provides abstractions for creating and managing search indexes.
+
+For example, the `greet` function shown in prior examples can be indexed to find users who have unsubscribed from the newsletter.
+
+### Indexing
+Pluck provides convenience methods for creating and managing RediSearch indexes. *The format is is a JSON-like abstraction based upon the RediSearch API.* Call this method at server startup or from a build script as it's a one-time operation.
+
+```javascript
+const schema = {
+  schema: {
+    email: { type: 'TAG', sortable: true },
+    newsletter: { type: 'TAG', sortable: true }, //yes|no
+    reason: { type: 'TEXT', sortable: false },    //reason for unsubscribing
+  },
+  index: 'greeting',    //the index ID is 'greeting'
+  prefix: ['greeting'], //index documents that begin with 'greeting'
+};
+
+await pluck.createSearchIndex('greeting', {}, schema);
+```
+
+>Pluck will log a warning if the index already exists or if the chosen Redis deployment does not have the RediSearch module enabled.
+
+### Searching
+Once the index is created, you can search for records, using the rich query language provided by [RediSearch](https://redis.io/commands/ft.search/). This example paginates through all users who have unsubscribed and includes the reason in the output. 
+
+> Pluck provides a JSON abstraction for building queries (shown here), but you can also use the raw RediSearch query directly that is returned in the response.
+
+```javascript
+const results = await pluck.findWhere('greeting', {
+ query: [{ field: 'newsletter', is: '=', value: 'no' }],
+ limit: { start: 0, size: 100 },
+ return: ['email', 'reason']
+});
+
+/*
+  //returns:
+
+  { count: 1,
+    query: 'FT.SEARCH greeting @_newsletter:{no} RETURN 2 _email _reason LIMIT 0 100',
+    data: [{ email: 'jsmith@pluck.com', reason: 'too much talk' }]
+  }
+*/
+```
+
 ## Build and Test
 The source files include a docker-compose that spins up one Redis instance and one Node instance. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
 
