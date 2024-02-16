@@ -219,12 +219,12 @@ Workflow extension methods are available to your operationalized functions.
       ```
 
 ## Search
-Pluck helps manage workflow state, by providing search extensions like `get`, `set`, and `del` to your operationalized functions. In addition, for those Redis backends with the *RediSearch* module enabled, Pluck provides abstractions for creating and managing search indexes.
+Pluck helps manage workflow state, by providing search extensions like `get`, `set`, and `del` to your operationalized functions. In addition, for those Redis backends with the *RediSearch* module enabled, Pluck provides abstractions for simplifying full text search.
 
 For example, the `greet` function shown in prior examples can be indexed to find users who have unsubscribed from the newsletter.
 
 ### Indexing
-Pluck provides convenience methods for creating and managing RediSearch indexes. *The format is is a JSON-like abstraction based upon the RediSearch API.* Call this method at server startup or from a build script as it's a one-time operation.
+The index format is a JSON-based abstraction based upon the RediSearch API.
 
 ```javascript
 const schema = {
@@ -240,12 +240,12 @@ const schema = {
 await pluck.createSearchIndex('greeting', {}, schema);
 ```
 
->Pluck will log a warning if the index already exists or if the chosen Redis deployment does not have the RediSearch module enabled.
+>Call this method at server startup or from a build script as it's a one-time operation. Pluck will log a warning if the index already exists or if the chosen Redis deployment does not have the RediSearch module enabled.
 
 ### Searching
 Once the index is created, you can search for records, using the rich query language provided by [RediSearch](https://redis.io/commands/ft.search/). This example paginates through all users who have unsubscribed and includes the reason in the output. 
 
-> Pluck provides a JSON abstraction for building queries (shown here), but you can also use the raw RediSearch query directly that is returned in the response.
+> Pluck provides a JSON abstraction for building queries (shown here), but you can also use the raw RediSearch query directly that is returned in the response. It's all standard Redis behind the scenes.
 
 ```javascript
 const results = await pluck.findWhere('greeting', {
@@ -263,6 +263,11 @@ const results = await pluck.findWhere('greeting', {
   }
 */
 ```
+
+## End-to-End Example
+Refer to the [Pluck JavaScript Examples](https://github.com/hotmeshio/samples-javascript/blob/main/test.js) for the simplest, end-to-end example that demonstrates the use of Pluck to operationalize a function, create a search index, and query the index.
+
+For a more in-depth example that demonstrates `hooks`, `signals`, and many of the other workflow extension methods, refer to the the [Pluck TypeScript Examples](https://github.com/hotmeshio/samples-typescript/tree/main/services/pluck).
 
 ## Build and Test
 The source files include a docker-compose that spins up one Redis instance and one Node instance. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
