@@ -1,19 +1,20 @@
 import ms from 'ms';
 import { Durable, HotMesh, MeshOS } from '@hotmeshio/hotmesh';
 import {
-  ConnectOptions,
   CallOptions,
+  ConnectionInput,
+  ConnectOptions,
+  ExecInput,
   FindWhereOptions,
   FindOptions,
   FindWhereQuery,
+  HookInput,
+  JobOutput,
+  SearchResults,
   StringAnyType,
   StringStringType,
-  JobOutput,
-  WorkflowSearchOptions, 
-  SearchResults} from '../types';
-import {
-  RedisClass,
-  RedisOptions } from '../types/redis';
+  WorkflowSearchOptions } from '../types';
+import { RedisClass, RedisOptions } from '../types/redis';
 
 /**
  * Pluck wraps the HotMesh `MeshOS` and `Durable` classes to
@@ -251,12 +252,11 @@ class Pluck {
    * 
    * @template T The expected return type of the target function.
    * 
-   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {(...args: any[]) => T} target - Function to connect, returns type T.
-   * @param {ConnectOptions} [options={}] - Optional. Config options for the connection.
-   *                                        If provided and `ttl` is set to 'infinity',
-   *                                        the function will be cached indefinitely and
-   *                                        can only be flushed/removed by calling `flush`.
+   * @param {object} connection - The options for connecting a function.
+   * @param {string} connection.entity - The global entity identifier for the function (e.g, 'user', 'order', 'product').
+   * @param {(...args: any[]) => T} connection.target - Function to connect, returns type T.
+   * @param {ConnectOptions} connection.options={} - Extended connection options (e.g., ttl, taskQueue). A
+   *                                                 ttl of 'infinity' will cache the function indefinitely.
    * 
    * @returns {Promise<boolean>} True if connection is successfully established.
    * 
@@ -264,19 +264,14 @@ class Pluck {
    * // Instantiate Pluck with Redis configuration.
    * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
    * 
-   * // Define a greeting function.
-   * const greet = (email: string, user: { first: string, last: string }) => {
-   *   return `Hello, ${user.first} ${user.last}. Your email is [${email}].`;
-   * };
-   * 
-   * // Connect the greet function with the 'greeting' entity.
-   * pluck.connect('greeting', greet);
-   * 
-   * // Connect durably with a TTL of 'infinity' (all calls are persisted as workflows).
-   * pluck.connect('greeting', greet, { ttl: 'infinity' });
-   *
+   * // Define and connect a function with the 'greeting' entity.
+   * pluck.connect({
+   *   entity: 'greeting',
+   *   target: (email, user) => `Hello, ${user.first}.`,
+   *   options: { ttl: 'infinity' }
+   * });
    */
-  async connect<T>(entity: string, target: (...args: any[]) => T, options: ConnectOptions = { }): Promise<boolean> {
+  async connect<T>({ entity, target, options = {} }: ConnectionInput<T>): Promise<boolean> {
     this.validate(entity);
 
     const targetFunction = { [entity]: async (...args: any[]): Promise<T> => {
@@ -288,9 +283,12 @@ class Pluck {
     }};
 
     await Durable.Worker.create({
+      namespace: options.namespace,
+      options: options.options ?? undefined,
       connection: await this.getConnection(),
       taskQueue: options.taskQueue ?? entity,
       workflow: targetFunction,
+      search: options.search,
     });
 
     return true;
@@ -311,7 +309,7 @@ class Pluck {
   bindCallOptions(args: any[], options: ConnectOptions, callOptions: CallOptions = {}): StringAnyType{
     if (args.length) {
       const lastArg = args[args.length - 1];
-      if (lastArg instanceof Object && lastArg.$type === 'exec') {
+      if (lastArg instanceof Object && lastArg?.$type === 'exec') {
         //override the caller and force indefinite caching
         callOptions = args.pop() as CallOptions;
         if (options.ttl === 'infinity') {
@@ -447,66 +445,64 @@ class Pluck {
   }
 
   /**
-   * Similar to `exec`, except the workflow is already running and the
-   * worfklow id (`entity`+`id`) is used to identify the workflow.
-   * The target function indentified by `hookEntity` is executed with 
-   * `hookArgs` but only augments the existing workflow state and
-   * does not create a new one.
+   * Similar to `exec`, except it augments the workflow state without creating a new job.
    * 
-   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {string} id - the job id
-   * @param {string} hookEntity - the hook entity name (the name used when it was connected)
-   * @param {any[]} hookArgs - the arguments to pass to the hook function. Must be JSON serializeable.
-   * @param {CallOptions} [options={}] - optional call options
-   * @returns {Promise<string>} - the signal id
+   * @param {object} input - The input parameters for hooking a function.
+   * @param {string} input.entity - The target entity name (e.g., 'user', 'order', 'product').
+   * @param {string} input.id - The target execution/workflow/job id.
+   * @param {string} input.hookEntity - The hook entity name (e.g, 'user.notification').
+   * @param {any[]} input.hookArgs - The arguments for the hook function; must be JSON serializable.
+   * @param {HookOptions} input.options={} - Extended hook options (taskQueue, namespace, etc).
+   * @returns {Promise<string>} The signal id.
+   * 
    * @example
-   * // hook a function
-   * const signalId = await pluck.hook('greeting', 'jdoe', 'sendNewsLetter', ['xxxx@xxxxx']);
-   * 
-   * // returns '123456732345-0' (redis stream message receipt)
+   * // Hook a function
+   * const signalId = await pluck.hook({
+   *   entity: 'greeting',
+   *   id: 'jdoe',
+   *   hookEntity: 'greeting.newsletter',
+   *   hookArgs: ['xxxx@xxxxx'],
+   *   options: {}
+   * });
    */
-  async hook(entity: string, id: string, hookEntity: string, hookArgs: any[], options: CallOptions = { }): Promise<string> {
+  async hook({ entity, id, hookEntity, hookArgs, options = {} }: HookInput): Promise<string> {
     const workflowId = this.mintGuid(entity, id);
     this.validate(workflowId);
     return await this.getClient().workflow.hook({
+      namespace: options.namespace,
       args: [...hookArgs, {...options, $guid: workflowId, $type: 'hook' }],
       taskQueue: options.taskQueue ?? hookEntity,
       workflowName: hookEntity,
-      workflowId,
-      //search: options.search, //(todo: expose in hotmesh)
+      workflowId: options.workflowId ?? workflowId,
+      config: options.config ?? undefined,
     });
   }
 
   /**
-   * Executes a remote function by its global identifier, passing the specified arguments.
-   * This method is asynchronous and supports custom execution options.
+   * Executes a remote function by its global entity identifier with specified arguments.
+   * If options.ttl is infinity, the function will be cached indefinitely and can only be
+   * removed by calling `flush`. During this time, the function will remain active and can
+   * its state can be augmented by calling `set`, `incr`, `del`, etc OR by calling a
+   * transactional 'hook' function.
    * 
-   * @template T The expected return type of the remote function
+   * @template T The expected return type of the remote function.
    * 
-   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {any[]} args - The arguments passed to the remote function.
-   * @param {CallOptions} [options={}] - Optional. Configuration options for the execution,
-   *                                     including custom IDs, time-to-live (TTL) settings, etc.
-   *                                     Defaults to an empty object if not provided.
+   * @param {object} input - The execution parameters.
+   * @param {string} input.entity - The function entity name (e.g., 'user', 'order', 'user.bill').
+   * @param {any[]} input.args - The arguments for the remote function.
+   * @param {CallOptions} input.options={} - Extended configuration options for execution (e.g, taskQueue).
    * 
-   * @returns {Promise<T>} A promise that resolves with the result of the remote function
-   *                       execution. The result is of type T, matching the expected return
-   *                       type of the remote function.
+   * @returns {Promise<T>} A promise that resolves with the result of the remote function execution.
    * 
    * @example
-   * // Example of using exec to invoke a remote function with arguments and options
-   * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
-   * 
-   * const response = await pluck.exec(
-   *   'greeting', 
-   *   ['jsmith@pluck', { first: 'Jan' }],
-   *   { ttl: '15 minutes', id: 'jsmith123' }
-   * );
-   * 
-   * // Assuming the remote function returns a greeting message, the response would be:
-   * // 'Hello, Jan Smith. Your email is [jsmith@pluck].'
+   * // Invoke a remote function with arguments and options
+   * const response = await pluck.exec({
+   *   entity: 'greeting',
+   *   args: ['jsmith@pluck', { first: 'Jan' }],
+   *   options: { ttl: '15 minutes', id: 'jsmith123' }
+   * });
    */
-  async exec<T>(entity: string, args: any[] = [], options: CallOptions = {}): Promise<T> {
+  async exec<T>({ entity, args = [], options = {} }: ExecInput): Promise<T> {
     const workflowId = this.mintGuid(options.prefix ?? entity, options.id);
     this.validate(workflowId);
 
@@ -526,8 +522,12 @@ class Pluck {
         args: [...args, {...options, $guid: workflowId, $type: 'exec' }],
         taskQueue: options.taskQueue ?? entity,
         workflowName: entity,
-        workflowId,
+        workflowId: options.workflowId ?? workflowId,
+        config: options.config ?? undefined,
         search: options.search,
+        workflowTrace: options.workflowTrace,
+        workflowSpan: options.workflowSpan,
+        namespace: options.namespace,
       });
       return await handle.result() as unknown as T;
     }
@@ -784,9 +784,9 @@ class Pluck {
   async find(entity: string, options: FindOptions, ...args: string[]): Promise<string[] | [number] | Array<string | number | string[]>> {    
     return await this.getClient().workflow.search(
       options.taskQueue ?? entity,
-      entity,
+      options.workflowName ?? entity,
       options.namespace || 'durable',
-      options.index ?? this.search.index,
+      options.index ?? options.search?.index ?? this.search.index,
       ...args,
     ); //[count, [id, fields[]], [id, fields[]], [id, fields[]], ...]]
   }
@@ -797,7 +797,7 @@ class Pluck {
    * NOTE: If the type is TAG for an entity, `.`, `@`, and `-` must be escaped.
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {FindWhereOptions} options 
+   * @param {FindWhereOptions} options - find options (the query)
    * @returns {Promise<SearchResults | number>} Returns a number if `count` is true, otherwise a SearchResults object.
    * @example
    * const results = await pluck.findWhere('greeting', {
@@ -833,7 +833,7 @@ class Pluck {
     }
     const FTResults = await this.find(entity, options.options ?? {}, ...args);
     const count = FTResults[0] as number;
-    const sargs = `FT.SEARCH ${this.search.index} ${args.join(' ')}`;
+    const sargs = `FT.SEARCH ${options.options?.index ?? options.options?.search?.index ?? this.search.index} ${args.join(' ')}`;
     if (options.count) {
       //always return number format if count is requested
       return !isNaN(count) || count > 0 ? count : 0;

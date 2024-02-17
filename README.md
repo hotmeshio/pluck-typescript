@@ -1,7 +1,7 @@
 # Pluck
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-Simplify **service-to-service function calls** with Redis-backed governance. *Pluck helps you expose and operationalize your most important functions.*
+Call any function from anywhere, reliably and durably. *Pluck operationalizes your most important functions with Redis-backed governance.*
 
 
 ## Install
@@ -10,11 +10,23 @@ Simplify **service-to-service function calls** with Redis-backed governance. *Pl
 ```sh
 npm install @hotmeshio/pluck
 ```
-## Docs
+## Documentation and Key Features
 [SDK Documentation](https://hotmeshio.github.io/pluck-typescript/)
 
-## Background
-Pluck works by inverting the relationship to Redis: those functions that once used Redis as a cache, are instead *cached and governed* by Redis. This inversion of control is particularly effective at refactoring a legacy code base.
+Pluck is a TypeScript library designed to simplify the invocation and management of distributed functions across your cloud infrastructure. By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing critical business logic within a microservices architecture. Key features include:
+
+- `Redis-Backed Function Governance`: Functions are managed and governed by Redis, ensuring reliability and scalability.
+- `Easy Integration`: Seamlessly integrates into existing code bases, allowing for the refactoring of legacy systems without extensive overhaul.
+- `Ad Hoc Network Creation`: Facilitates the creation of an operational data layer by connecting functions into a single, manageable mesh.
+- `Durable Workflow Support`: Supports the transformation of functions into durable workflows with Redis-backed persistence.
+- `Flexible Function Invocation`: Functions can be called remotely with ease, supporting both cached and uncached execution modes.
+- `Workflow Extensions`: Offers a suite of workflow extension methods including hooks for extending functionality, signal handling for inter-process communication, and sleep for delaying execution.
+- `Search and Indexing`: Provides tools for managing workflow state and leveraging Redis' search capabilities to query operational data.
+
+Pluck is designed with the cloud developer in mind, offering a straightforward approach to enhancing the operability and maintainability of cloud-based functions.
+
+## Understanding Pluck
+Pluck inverts the relationship to Redis: those functions that once used Redis as a cache, are instead *cached and governed* by Redis. This inversion of control is particularly effective at refactoring a legacy code base.
 
 Consider the following. It's a typical microservices network, with a tangled mess of services and functions. There's important business logic in there (functions *A*, *B* and *C* are critical!), but they're hard to find and access.
 
@@ -25,7 +37,7 @@ Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational 
 *Any service with access to Redis can join in the network, bypassing the legacy clutter.*
 
 ## Design
-### Connect
+### Connect Your Functions
 Connect and expose target functions. Here the `greet` function is registered as 'greeting'.
 
 ```javascript
@@ -38,7 +50,10 @@ const greet = (email: string, first: string) => {
   return `Welcome, ${first}.`;
 }
 
-pluck.connect('greeting', greet);
+pluck.connect({
+  entity: 'greeting',
+  target: greet
+});
 ```
 
 ### Execute
@@ -49,37 +64,42 @@ import Redis from 'ioredis';
 import { Pluck } from '@hotmeshio/pluck'
 
 const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
-const response = await pluck.exec('greeting', ['jsmith@pluck', 'Jan']);
+
+const response = await pluck.exec({
+  entity: 'greeting',
+  args: ['jsmith@pluck', 'Jan']
+});
+
 //returns 'Welcome, Jan.'
 ```
 
 ### Execute and Cache
-Provide an `id` and `ttl` flag in the format `1 minute`, `2 weeks`, `3 months`, etc to cache the function response. Subsequent calls will use the cached result until it expires.
+Provide an `id` and `ttl` flag in the format `1 minute`, `2 weeks`, `3 months`, etc to cache the function response.
 
 ```javascript
-const response = await pluck.exec(
-  'greeting',
-  ['jsmith@pluck', 'Jan'],
-  { id: 'jsmith', ttl: '15 minutes'}
-);
+const response = await pluck.exec({
+  entity: 'greeting',
+  args: ['jsmith@pluck', 'Jan'],
+  options: { id: 'jsmith', ttl: '15 minutes' }
+});
 ```
 
 ### Execute and Operationalize
 Provide a `ttl` of `infinity` to operationalize the function. It's now a **durable workflow** with all the benefits of Redis-backed governance.
 
 ```javascript
-const response = await pluck.exec(
-  'greeting',
-  ['jsmith@pluck', 'Jan'],
-  { id: 'jsmith', ttl: 'infinity'}
-);
+const response = await pluck.exec({
+  entity: 'greeting',
+  args: ['jsmith@pluck', 'Jan'],
+  options: { id: 'jsmith', ttl: 'infinity' }
+});
 ```
 
-## Data in Motion: Operationalize Your Functions
-Pluck does more than route function calls. Setting `ttl` to 'infinity' converts the function into a *durable workflow*. Your function will now run as part of the Redis-backed operational data layer (ODL) and can only be removed by calling `flush`.
+## Operationalize Your Functions: Data in Motion
+Pluck does more than route function calls. Setting `ttl` to `infinity` converts the function into a *durable workflow*. Your function will now run as part of the Redis-backed operational data layer (ODL) and can only be removed by calling `flush`.
 
 ```javascript
-const response = await pluck.flush('greeting', 'jsmith');
+const response = await pluck.flush( 'greeting', 'jsmith');
 ```
 
 During this time you can bind *Hooks* to extend your function. Hooks are *subordinated-workflows* that run transactionally, with read/write access to shared function state. Consider the `greet` function which has been updated to persist the user's email and sign them up for a recurring newsletter (using a **Hook**).
@@ -128,28 +148,38 @@ const newsLetter = async () => {
 }
 
 //register the hook function
-pluck.connect('newsletter.subscribe', newsLetter);
+pluck.connect({
+  entity: 'newsletter.subscribe',
+  target: newsLetter
+});
 ```
 
 >💡If you are familiar with durable workflow engines like Temporal, you'll recognize the need to wrap (i.e., "proxy") activities, so they run *once*. Pluck provides the `once` method to do this. What's important is that it is wrapped, so it only ever gets called *one time* during the life of the workflow.
 
-Cancelling the subscription is equally straightforward: create and connect a function that sets `newsletter` to 'no'.
+Cancelling the subscription is equally straightforward: create and connect a function that sets `newsletter` to `no` and saves a `reason`.
 
 ```javascript
-pluck.connect('newsletter.unsubscribe', async (reason) => {
-  //update preferences and provide a reason via `Worflow.search`
-  const search = await Pluck.workflow.search();
-  await search.set('newsletter', 'no', 'reason', reason);
+pluck.connect({
+  entity: 'newsletter.unsubscribe',
+  target: async (reason) => {
+    //set newsletter prefs to no; save the reason
+    const search = await Pluck.workflow.search();
+    await search.set('newsletter', 'no', 'reason', reason);
+  }});
+```
+
+Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer). Once the request is acknowledged, the `newsletter.unsubscribe` hook will run transactionally through completion.
+
+```javascript
+await pluck.hook({
+  entity: 'greeting',
+  id: 'jsmith',
+  hookEntity: 'newsletter.unsubscribe',
+  hookArgs: ['too much talk'],
 });
 ```
 
-Call the `newsletter.unsubscribe` hook from anywhere on the network (it's now part of your operational data layer).
-
-```javascript
-await pluck.hook('greeting', 'jsmith123', 'newsletter.unsubscribe', ['user-requested-reason']);
-```
-
-### Workflow Extensions
+### Enhancing Functionality with Workflow Extensions
 Workflow extension methods are available to your operationalized functions.
 
  - `waitForSignal` Pause your function and wait for external event(s) before continuing. The *waitForSignal* method will collate and cache the signals and only awaken your function once all signals have arrived.
@@ -188,6 +218,10 @@ Workflow extension methods are available to your operationalized functions.
       entity: 'bill',
       args: [{ id, user_id, plan, cycle, amount, discount }],
     });
+    ```
+ - `getContext` Get the current workflow context (workflowId, etc).
+    ```javascript
+    const context = await Pluck.workflow.getContext();
     ```
  - `search` Instance a search session
     ```javascript
@@ -243,33 +277,32 @@ await pluck.createSearchIndex('greeting', {}, schema);
 >Call this method at server startup or from a build script as it's a one-time operation. Pluck will log a warning if the index already exists or if the chosen Redis deployment does not have the RediSearch module enabled.
 
 ### Searching
-Once the index is created, you can search for records, using the rich query language provided by [RediSearch](https://redis.io/commands/ft.search/). This example paginates through all users who have unsubscribed and includes the reason in the output. 
+Once the index is created, records can be searched using the rich query language provided by [RediSearch](https://redis.io/commands/ft.search/). This example paginates through all users who have unsubscribed and includes the reason in the output. 
 
 > Pluck provides a JSON abstraction for building queries (shown here), but you can also use the raw RediSearch query directly that is returned in the response. It's all standard Redis behind the scenes.
 
 ```javascript
 const results = await pluck.findWhere('greeting', {
  query: [{ field: 'newsletter', is: '=', value: 'no' }],
- limit: { start: 0, size: 100 },
+ limit: { start: 0, size: 10 },
  return: ['email', 'reason']
 });
 
-/*
-  //returns:
+// returns
+// { 
+//   count: 1,
+//   query: 'FT.SEARCH greeting @_newsletter:{no} RETURN 2 _email _reason LIMIT 0 10',
+//   data: [{ email: 'jsmith@pluck.com', reason: 'too much talk' }]
+// }
 
-  { count: 1,
-    query: 'FT.SEARCH greeting @_newsletter:{no} RETURN 2 _email _reason LIMIT 0 100',
-    data: [{ email: 'jsmith@pluck.com', reason: 'too much talk' }]
-  }
-*/
 ```
 
-## End-to-End Example
+## Examples and Use Cases
 Refer to the [Pluck JavaScript Examples](https://github.com/hotmeshio/samples-javascript/blob/main/test.js) for the simplest, end-to-end example that demonstrates the use of Pluck to operationalize a function, create a search index, and query the index.
 
 For a more in-depth example that demonstrates `hooks`, `signals`, and many of the other workflow extension methods, refer to the the [Pluck TypeScript Examples](https://github.com/hotmeshio/samples-typescript/tree/main/services/pluck).
 
-## Build and Test
+## Build, Test and Extend
 The source files include a docker-compose that spins up one Redis instance and one Node instance. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
 
 Deploy the container:

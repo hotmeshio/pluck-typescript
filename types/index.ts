@@ -1,9 +1,59 @@
 export type ConnectOptions = {
-  ttl?: string; //if set to infinity, callers may NOT override
-  taskQueue?: string; //optional taskQueue for the workflowId (defaults to entity)
+  /**
+   * if set to infinity, callers may not override (the function will be durable)
+   */
+  ttl?: string;
+  /**
+   * the task queue for the connected function for greater specificity
+   */
+  taskQueue?: string;
+  /**
+   * prefix for the workflowId (defaults to entity value if not provided)
+   */
+  prefix?: string; 
+  /**
+   * optional namespace for the the worker; how it appears in Redis (defaults to 'durable')
+   */
+  namespace?: string; //optional namespace for the workflowId (defaults to 'durable')
+  /**
+   * extended worker options
+   */
+  options?: WorkerOptions;
+  /**
+   * optional search configuration
+   */
+  search?: WorkflowSearchOptions;
 };
 
-export type SearchResults = {count: number, query: string, data: StringStringType[]};
+export type WorkerOptions = {
+  /**
+   * debug, info, warn, error
+   */
+  logLevel?: string;
+  /**
+   * 1-3 (10ms, 100ms, 1_000ms)
+   */
+  maxSystemRetries?: number;
+  /**
+   * 1-3 (10ms, 100ms, 1_000ms)
+   */
+  backoffCoefficient?: number; //2-10ish
+};
+
+export type SearchResults = {
+  /**
+   * the total number of results
+   */
+  count: number,
+  /**
+   * the raw FT.SEARCH query string
+   */
+  query: string,
+  /**
+   * the raw FT.SEARCH results as an array of objects
+   */
+  data: StringStringType[]
+};
 
 export type WorkflowContext = {
   /**
@@ -37,33 +87,165 @@ export type WorkflowContext = {
 };
 
 export type WorkflowSearchOptions = {
-  index?: string;         //FT index name (myapp:myindex)
-  prefix?: string[];      //FT prefixes (['myapp:myindex:prefix1', 'myapp:myindex:prefix2'])
+  /**
+   * FT index name (myapp:myindex)
+   */
+  index?: string;
+  /**
+   * FT prefixes (['myapp:myindex:prefix1', 'myapp:myindex:prefix2'])
+   */
+  prefix?: string[];
+  /**
+   * FT field types (TEXT, NUMERIC, TAG)
+   */
   schema?: Record<string, {type: 'TEXT' | 'NUMERIC' | 'TAG', sortable?: boolean}>;
+  /**
+   * data to seed the search space
+   */
   data?: Record<string, string>;
 }
 
-export type WorkflowOptions = {
-  namespace?: string;
-  taskQueue: string;
+/**
+ * Connect a function to the operational data layer.
+ * @template T - the return type of the connected function
+ */
+export type ConnectionInput<T> = {
+  /**
+   * The connected function's entity identifier
+   * 
+   * @example
+   * user
+   */
+  entity: string;
+  /**
+   * The target function reference
+   * 
+   * @example
+   * function() { return "hello world" }
+   */
+  target: (...args: any[]) => T;
+  /**
+   * Extended connection options (e.g., ttl, taskQueue)
+   * @example
+   * { ttl: 'infinity' }
+   */
+  options?: ConnectOptions;
+};
+
+/**
+ * Executes a remote function by its global entity identifier with specified arguments.
+ * If options.ttl is infinity, the function will be cached indefinitely and can only be
+ * removed by calling `flush`. During this time, the function will remain active and can
+ * its state can be augmented by calling `set`, `incr`, `del`, etc OR by calling a
+ * transactional 'hook' function.
+ * 
+ * @template T The expected return type of the remote function.
+ */
+export type ExecInput = {
+  /**
+   * the connected function's entity identifier
+   * @example
+   * user
+   */
+  entity: string;
+  /**
+   * the function's input arguments
+   * @example
+   * ['Jane', 'Doe']
+   */
   args: any[];
+  /**
+   * Extended options for the hook function, like specifying a taskQueue or ttl
+   * @example
+   * { ttl: '5 minutes' }
+   */
+  options?: Partial<WorkflowOptions>;
+};
+
+/**
+ * Hook function inputs. Hooks augment running jobs.
+ */
+export type HookInput = {
+  /**
+   * The target function's entity identifier
+   * @example 'user'
+   */
+  entity: string;
+  /**
+   * The target execution id (workflowId/jobId)
+   * @example 'jsmith123'
+   */
+  id: string;
+  /**
+   * The hook function's entity identifier
+   * @example 'user.notify'
+   */
+  hookEntity: string;
+  /**
+   * The hook function's input arguments
+   * @example 'notify'
+   */
+  hookArgs: any[];
+  /**
+   * Extended options for the hook function, like specifying a taskQueue
+   * @example { taskQueue: 'priority' }
+   */
+  options?: Partial<HookOptions>;
+};
+
+export type WorkflowOptions = {
+  /**
+   * The app deployment namespace; how it appears in redis (e.g., 'durable')
+   */
+  namespace?: string;
+  /**
+   * Target connected functions more specifically by taskQueue
+   */
+  taskQueue?: string;
+  /**
+   * The connected function's entity identifier
+   */
   prefix?: string;
+  /**
+   * The function execution id (shorthand for workflowId)
+   */
+  id?: string;
+  /**
+   * The function execution id
+   */
   workflowId?: string;
+  /**
+   * The function name (`entity` is a shorthand for this)
+   */
   workflowName?: string;
-  parentWorkflowId?: string;
+  /**
+   * The open telemetry trace context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
+   */
   workflowTrace?: string;
+  /**
+   * The open telemetry span context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
+   */
   workflowSpan?: string;
+  /**
+   * Search fields to seed function state when it first initializes
+   */
   search?: WorkflowSearchOptions;
+  /**
+   * Extended execution options
+   */
   config?: WorkflowConfig;
+  /**
+   * Set to 'infinity' to make the function durable; otherwise, '1 minute', '1 hour', etc
+   */
+  ttl?: string;
 };
 
 export type HookOptions = {
   namespace?: string;
   taskQueue?: string;
-  args: any[];
+  entity?: string;
   workflowId?: string;
   workflowName?: string;
-  search?: WorkflowSearchOptions;
   config?: WorkflowConfig;
 };
 
@@ -160,6 +342,7 @@ export type FindOptions = {
   taskQueue?: string;
   namespace?: string;
   index?: string;
+  search?: WorkflowSearchOptions
 };
 
 export type FindWhereOptions = {

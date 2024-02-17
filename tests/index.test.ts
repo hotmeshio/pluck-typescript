@@ -2,7 +2,7 @@ import * as Redis from 'redis';
 
 import config from './$setup/config';
 import * as activities from './activities';
-import { Durable, Pluck, MeshOS, HotMesh } from '../index';
+import {Pluck, HotMesh } from '../index';
 import { JobOutput } from '@hotmeshio/hotmesh/build/types/job';
 import { StringStringType, WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
 
@@ -64,7 +64,7 @@ describe('Pluck`', () => {
     //prove by calling three times (but using the cached instance for the last 2)
     for (let i = 1; i < 4; i++) {
       const cachedI = await sendNewsLetter(email, i);
-      console.log('outgoing count', email, i, cachedI);
+      //console.log('outgoing count', email, i, cachedI);
     }
 
     //spawn the `sendRecurringNewsLetter` hook (a parallel subroutine)
@@ -74,7 +74,7 @@ describe('Pluck`', () => {
         workflowName: 'subscribe',
         taskQueue: 'subscribe',
       });
-      console.log('hooked a newsletter with id >', msgId);
+      //console.log('hooked a newsletter with id >', msgId);
     }
     return `Hello, ${user.first} ${user.last}. Your email is [${email}].`;
   }
@@ -101,7 +101,7 @@ describe('Pluck`', () => {
     let shouldProceed: boolean;
     do {
       email = await search.get('email');
-      console.log('hook now running; send newsletter to >', email);
+      //console.log('hook now running; send newsletter to >', email);
 
       //the 'sendNewsLetter' function is a `proxy` and will only run once
       await sendNewsLetter(email);
@@ -110,16 +110,16 @@ describe('Pluck`', () => {
       await search.set('newsletter', 'no');
       shouldProceed = await search.get('newsletter') === 'yes';
     } while(shouldProceed);
-    console.log('hook now exiting; shouldProceed >', email, shouldProceed);
+    //console.log('hook now exiting; shouldProceed >', email, shouldProceed);
   }
 
   //another hook function to unsubscribe from the newsletter
   const unsubscribeFromNewsLetter = async (reason: string) => {
     const search = await Pluck.workflow.search();
     const email = await search.get('email');
-    console.log('hook running; unsubscribe? >', email, 'no', reason);
+    //console.log('hook running; unsubscribe? >', email, 'no', reason);
     await search.set('newsletter', 'no', 'reason', reason);
-    console.log('hook exiting; unsubscribed? >', 'done');
+    //console.log('hook exiting; unsubscribed? >', 'done');
   }
 
   beforeAll(async () => {
@@ -133,20 +133,32 @@ describe('Pluck`', () => {
 
   describe('connect', () => {
     it('should connect a function', async () => {
-      const worker = await pluck.connect(entityName, greet);
+      const worker = await pluck.connect<Promise<string>>({
+        entity: entityName,
+        target: greet,
+      });
       expect(worker).toBeDefined();
 
-      const sleeperWorker = await pluck.connect("sleeper", sleeper);
+      const sleeperWorker = await pluck.connect({
+        entity: 'sleeper',
+        target: sleeper,
+      });
       expect(sleeperWorker).toBeDefined();
     });
 
     it('should connect a hook function', async () => {
-      const worker = await pluck.connect('subscribe', sendRecurringNewsLetter);
+      const worker = await pluck.connect({
+        entity: 'subscribe',
+        target: sendRecurringNewsLetter,
+      });
       expect(worker).toBeDefined();
     });
 
     it('should connect another hook function', async () => {
-      const worker = await pluck.connect('unsubscribe', unsubscribeFromNewsLetter);
+      const worker = await pluck.connect({
+        entity: 'unsubscribe',
+        target: unsubscribeFromNewsLetter,
+      });
       expect(worker).toBeDefined();
     });
   });
@@ -157,10 +169,10 @@ describe('Pluck`', () => {
       const name = {first: 'John', last: 'Doe'};
 
       //broker using Pluck (Redis will govern the exchange)
-      const brokered = await pluck.exec<Promise<string>>(
-        'greeting',
-        [email, name],
-        { 
+      const brokered = await pluck.exec<Promise<string>>({
+        entity: 'greeting',
+        args: [email, name],
+        options: { 
           //SEED the initial workflow state with data (this is
           //different than the 'args' input data which the workflow
           //receives as its first argument...this data is available
@@ -173,7 +185,7 @@ describe('Pluck`', () => {
             }
           },
           id: 'jdoe',
-        });
+        }});
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
@@ -189,9 +201,10 @@ describe('Pluck`', () => {
     });
 
     it('should only run proxy functions one time', async () => {
-      //console.log('START SLEEPER ------')
-      await pluck.exec<void>('sleeper', ['sleeper@pluck.com']);
-      //console.log('END SLEEPER --------')
+      await pluck.exec<void>({
+        entity: 'sleeper',
+        args: ['sleeper@pluck.com'],
+      });
     }, 20_000);
 
     it('should return RAW fields (HGETALL)', async () => {
@@ -244,11 +257,11 @@ describe('Pluck`', () => {
       const name = {first: 'Fred', last: 'Doe'};
 
       //call with Pluck (Redis will govern the exchange)
-      const brokered = await pluck.exec<Promise<string>>(
-        'greeting',
-        [email, name],
-        { ttl: '1 second', id: 'abc123'}
-      );
+      const brokered = await pluck.exec<Promise<string>>({
+        entity: 'greeting',
+        args: [email, name],
+        options: { ttl: '1 second', id: 'abc123'}
+      });
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
@@ -260,11 +273,11 @@ describe('Pluck`', () => {
       const name = {first: 'Floe', last: 'Doe'};
 
       //call with Pluck (Redis will govern the exchange)
-      const brokered = await pluck.exec<Promise<string>>(
-        'greeting',
-        [email, name],
-        { ttl: 'infinity', id: 'abc456' }
-      );
+      const brokered = await pluck.exec<Promise<string>>({
+        entity: 'greeting',
+        args: [email, name],
+        options: { ttl: 'infinity', id: 'abc456' }
+      });
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
@@ -296,11 +309,11 @@ describe('Pluck`', () => {
       //b) redis will retry until `showThrowError` switches to `false`
       //c) the 'greet' function will set shouldThrowError to false after 2 runs
       shouldThrowError = true;
-      const brokered = await pluck.exec<Promise<string>>(
-        'greeting',
-        [email, name],
-        { id: idemKey }
-      );
+      const brokered = await pluck.exec<Promise<string>>({
+        entity: 'greeting',
+        args: [email, name],
+        options: { id: idemKey }
+      });
       expect(errorCount).toEqual(2);
       expect(shouldThrowError).toBeFalsy();
 
@@ -328,7 +341,12 @@ describe('Pluck`', () => {
       let pluckData = await pluck.all('greeting', idemKey);
       expect(pluckData.newsletter).toEqual('yes');
       //hooks only return an id (this is the `guarantee` the hook will complete)
-      const hookId = await pluck.hook('greeting', idemKey, 'unsubscribe', [reason]);
+      const hookId = await pluck.hook({
+        entity: 'greeting',
+        id: idemKey,
+        hookEntity: 'unsubscribe',
+        hookArgs: [reason],
+      });
       expect(hookId).toBeDefined();
       //hooks are async; sleep to allow the hook to run
       await new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -391,7 +409,7 @@ describe('Pluck`', () => {
           ],
           count: true
       }) as number;
-      console.log('search count >', count);
+      //console.log('search count >', count);
       expect(count).toBeGreaterThan(0);
     });
   });
