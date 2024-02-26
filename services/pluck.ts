@@ -1,4 +1,3 @@
-import ms from 'ms';
 import { Durable, HotMesh, MeshOS } from '@hotmeshio/hotmesh';
 import {
   CallOptions,
@@ -9,18 +8,20 @@ import {
   FindOptions,
   FindWhereQuery,
   HookInput,
+  JobInterruptOptions,
   JobOutput,
   SearchResults,
   StringAnyType,
   StringStringType,
-  WorkflowSearchOptions } from '../types';
+  WorkflowSearchOptions, 
+  Model } from '../types';
 import { RedisClass, RedisOptions } from '../types/redis';
 
 /**
- * Pluck wraps the HotMesh `MeshOS` and `Durable` classes to
- * provide a simpler, user-friendly method for establishing
- * an "Operational Data Layer" (ODL).
- * 
+ * Pluck wraps the HotMesh `Durable` classes
+ * (Worker, Client, Workflow and Search) to
+ * provide a simpler, user-friendly method for
+ * establishing an "Operational Data Layer" (ODL).
  */
 class Pluck {
 
@@ -50,7 +51,6 @@ class Pluck {
    *  password: 'shhh123',
    *  database: 0,
    * };
-
    */
   redisOptions: RedisOptions;
 
@@ -66,7 +66,7 @@ class Pluck {
   /**
    * Optional model declaration (custom workflow state)
    */
-  model: StringAnyType;
+  model: Model;
 
   /**
    * Optional configuration for Redis FT search
@@ -106,16 +106,23 @@ class Pluck {
     random: Durable.workflow.random,
     search: Durable.workflow.search,
     getContext: Durable.workflow.getContext,
-    proxyActivities: Durable.workflow.proxyActivities,
-    once: Durable.workflow.proxyActivities,
+    once: Durable.workflow.once,
+
+    /**
+     * Interrupts a job by its entity and id.
+     */
+    interrupt: async (entity: string, id: string, options: JobInterruptOptions = {}) => {
+      const jobId = Pluck.mintGuid(entity, id);
+      await Durable.workflow.interrupt(jobId, options);
+    }
   };
 
   /**
    * 
    * @param {any} redisClass - the Redis class/import (e.g, `ioredis`, `redis`)
    * @param {StringAnyType} redisOptions - the Redis connection options. These are specific to the package (refer to their docs!). Each uses different property names and structures. 
-   * @param {StringAnyType} model - Optional. the data model (e.g, `{ name: { type: 'string' } }`)
-   * @param {WorkflowSearchOptions} search - Optional. the Redis search options for JSON-based configuration of the Redis FT.Search module index
+   * @param {StringAnyType} model - the data model (e.g, `{ name: { type: 'string' } }`)
+   * @param {WorkflowSearchOptions} search - the Redis search options for JSON-based configuration of the Redis FT.Search module index
    * @example
    * // Instantiate Pluck with an `ioredis` configuration.
    * import Redis from 'ioredis';
@@ -140,7 +147,7 @@ class Pluck {
    *  database: 0,
    * };
    */
-  constructor(redisClass: RedisClass, redisOptions: RedisOptions, model?: StringAnyType, search?: WorkflowSearchOptions) {
+  constructor(redisClass: RedisClass, redisOptions: RedisOptions, model?: Model, search?: WorkflowSearchOptions) {
     this.redisClass = redisClass
     this.redisOptions = redisOptions
     this.model = model;
@@ -215,7 +222,7 @@ class Pluck {
    * @returns {string}
    * @private
    */
-  mintGuid(entity: string, id: string): string {
+  static mintGuid(entity: string, id: string): string {
     if (!id && !entity) {
       throw "Invalid arguments [entity and id are both null]";
     } else if (!id) {
@@ -244,7 +251,7 @@ class Pluck {
   async mintKey(entity: string, workflowId: string): Promise<string> {
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
     const store = handle.hotMesh.engine.store;
-    return store.mintKey(3, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
+    return store.mintKey(4, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
   }
 
   /**
@@ -296,7 +303,7 @@ class Pluck {
 
   /**
    * During remote execution, an argument is injected (the last argument)
-   * ths is then used by the 'connect' function to determine if the call
+   * this is then used by the 'connect' function to determine if the call
    * is a hook or a exec call. If it is an exec, the connected function has
    * precedence and can say that all calls are cached indefinitely.
    *
@@ -329,7 +336,8 @@ class Pluck {
   }
 
   /**
-   * Sleeps to keep the function open and remain part of the operational data layer
+   * Sleeps/WaitsForSignal to keep the function open
+   * and remain part of the operational data layer
    * 
    * @template T The expected return type of the remote function
    * 
@@ -341,24 +349,17 @@ class Pluck {
     if (options?.ttl && options.$type === 'exec') {
       const hotMesh = await Pluck.workflow.getHotMesh();
       const store = hotMesh.engine.store;
-      const jobKey = store.mintKey(3, { jobId: options.$guid, appId: hotMesh.engine.appId });
+      const jobKey = store.mintKey(4, { jobId: options.$guid, appId: hotMesh.engine.appId });
+      //publish the 'done' payload
+      const jobResponse = ['aAa', '/t', 'aBa', `/s${JSON.stringify(result)}`];
+      await store.exec('HSET', jobKey, ...jobResponse);
+      await this.publishDone<T>(result, hotMesh, options);
       if (options.ttl === 'infinity') {
-        //publish the 'done' payload
-        const jobResponse = ['aAa', '/t', 'aBa', `/s${JSON.stringify(result)}`];
-        await store.exec('HSET', jobKey, ...jobResponse);
-        await this.publishDone<T>(result, hotMesh, options);
         //job will only exit upon receiving a flush signal
         await Pluck.workflow.waitForSignal([`flush-${options.$guid}`])
       } else {
-        //the job is over; change the expires time to self-erase
-        const seconds = ms(options.ttl) / 1000;
-        setTimeout(async () => {
-          try {
-            await store.exec('EXPIRE', jobKey, seconds.toString());
-          } catch (e) {
-            console.log('Pluck Expiration Error', jobKey, seconds, e);
-          }
-        }, 2_500);
+        //pluck will exit after sleeping for 'ttl'
+        await Pluck.workflow.sleepFor(options.ttl);
       }
     }
   }
@@ -380,7 +381,7 @@ class Pluck {
    */
   async publishDone<T>(result: T, hotMesh: HotMesh, options: CallOptions): Promise<void> {
     await hotMesh.engine.store.publish(
-      8, 
+      9, 
       {
         type: 'job',
         topic: `${hotMesh.engine.appId}.executed`,
@@ -420,9 +421,42 @@ class Pluck {
    * // Flush a function
    * await pluck.flush('greeting', '12345');
    */
-  async flush(entity: string, id: string): Promise<string> {
-    const workflowId = this.mintGuid(entity, id);
-    return await this.getClient().workflow.signal(`flush-${workflowId}`, {});
+  async flush(entity: string, id: string): Promise<string | void> {
+    const workflowId = Pluck.mintGuid(entity, id);
+    //resolve the system signal (this forces the main wrapper function to end)
+    await this.getClient().workflow.signal(`flush-${workflowId}`, {});
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    //hooks may still be running; call `interrupt` to stop all threads
+    await this.interrupt(entity, id, { descend: true, suppress: true, expire: 1 });
+  }
+
+  /**
+   * Interrupts a job by its entity and id. It is best not to call this
+   * method directly for entries with a ttl of `infinity` (call `flush` instead).
+   * For those entities that are cached for a specified duration (e.g., '15 minutes'),
+   * this method will interrupt the job and start the cascaded cleanup/expire/delete.
+   * As jobs are asynchronous, there is no way to stop descendant flows immediately.
+   * Use an `expire` option to keep the interrupted job in the cache for a specified
+   * duration before it is fully removed.
+   * 
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
+   * @param {string} id - The workflow/job id
+   * @param {JobInterruptOptions} [options={}] - call options
+   * 
+   * @example
+   * // Interrupt a function
+   * await pluck.interrupt('greeting', '12345');
+   * @param options 
+   */
+  async interrupt(entity: string, id: string, options: JobInterruptOptions = {}): Promise<void> {
+    const workflowId = Pluck.mintGuid(entity, id);
+    try {
+      const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+      const hotMesh = handle.hotMesh;
+      await hotMesh.interrupt(`${hotMesh.appId}.execute`, workflowId, options);
+    } catch(e) {
+      console.log(e);
+    }
   }
 
   /**
@@ -466,7 +500,7 @@ class Pluck {
    * });
    */
   async hook({ entity, id, hookEntity, hookArgs, options = {} }: HookInput): Promise<string> {
-    const workflowId = this.mintGuid(entity, id);
+    const workflowId = Pluck.mintGuid(entity, id);
     this.validate(workflowId);
     return await this.getClient().workflow.hook({
       namespace: options.namespace,
@@ -503,7 +537,7 @@ class Pluck {
    * });
    */
   async exec<T>({ entity, args = [], options = {} }: ExecInput): Promise<T> {
-    const workflowId = this.mintGuid(options.prefix ?? entity, options.id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, options.id);
     this.validate(workflowId);
 
     const client = this.getClient();
@@ -574,7 +608,7 @@ class Pluck {
    * }
    */
   async info(entity: string, id: string, options: CallOptions = {}): Promise<JobOutput> {
-    const workflowId = this.mintGuid(options.prefix ?? entity, id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
     const handle = await this.getClient().workflow.getHandle(options.taskQueue ?? entity, entity, workflowId);
@@ -587,13 +621,13 @@ class Pluck {
    * function at the moment it completed. Instead, function state represents
    * mutable shared state that can be set:
    * 1) when the record is first created (provide `options.search.data` to `exec`)
-   * 2) during function (await (await new Pluck.workflow.search()).set(...))
-   * 3) during hook execution (await (await new Pluck.workflow.search()).set(...))
-   * 4) via the pluck SDK (provide name/value pairs and call `this.set`)
+   * 2) during function execution ((await Pluck.workflow.search()).set(...))
+   * 3) during hook execution ((await Pluck.workflow.search()).set(...))
+   * 4) via the pluck SDK (`pluck.set(...)`)
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
-   * @param {CallOptions} [options={}] - optional call options
+   * @param {CallOptions} [options={}] - call options
    * 
    * @returns {Promise<StringAnyType>} - the function state
    * 
@@ -604,7 +638,7 @@ class Pluck {
    * // returns { fred: 'flintstone', barney: 'rubble' }
    */
   async get(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType>{
-    const workflowId = this.mintGuid(options.prefix ?? entity, id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
     let prefixedFields = [];
@@ -620,7 +654,6 @@ class Pluck {
     const store = handle.hotMesh.engine.store;
     const jobKey = await this.mintKey(entity, workflowId);
     const vals = await store.exec('HMGET', jobKey, ...prefixedFields);
-
     const result = prefixedFields.reduce((obj, field: string, index) => {
       obj[field.substring(1)] = vals[index];
       return obj;
@@ -638,7 +671,7 @@ class Pluck {
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the workflow/job id
-   * @param {CallOptions} [options={}] - optional call options
+   * @param {CallOptions} [options={}] - call options
    * 
    * @returns {Promise<StringAnyType>} - the function state
    * 
@@ -671,7 +704,7 @@ class Pluck {
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the workflow/job id
-   * @param {CallOptions} [options={}] - optional call options
+   * @param {CallOptions} [options={}] - call options
    * 
    * @returns {Promise<StringAnyType>} - the function state
    * 
@@ -682,7 +715,7 @@ class Pluck {
    * // returns { : '0', _barney: 'rubble', aBa: 'Hello, John Doe. Your email is [jdoe@pluck].', ... }
    */
   async raw(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType> {
-    const workflowId = this.mintGuid(options.prefix ?? entity, id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
     const store = handle.hotMesh.engine.store;
@@ -703,7 +736,7 @@ class Pluck {
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
-   * @param {CallOptions} [options={}] - optional call options
+   * @param {CallOptions} [options={}] - call options
    * 
    * @returns {Promise<number>} - count
    * @example
@@ -711,7 +744,7 @@ class Pluck {
    * const count = await pluck.set('greeting', 'jdoe', { search: { data: { fred: 'flintstone', barney: 'rubble' } } });
    */
   async set(entity: string, id: string, options: CallOptions = {}): Promise<number> {
-    const workflowId = this.mintGuid(options.prefix ?? entity, id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
     const store = handle.hotMesh.engine.store;
@@ -729,7 +762,7 @@ class Pluck {
    * @param {string} id - the job id
    * @param {string} field - the field name
    * @param {number} amount - the amount to increment
-   * @param {CallOptions} [options={}] - optional call options
+   * @param {CallOptions} [options={}] - call options
    * 
    * @returns {Promise<number>} - the new value
    * @example
@@ -737,7 +770,7 @@ class Pluck {
    * const count = await pluck.incr('greeting', 'jdoe', 'counter', 1);
    */
   async incr(entity: string, id: string, field: string, amount: number, options: CallOptions = {}): Promise<number> {
-    const workflowId = this.mintGuid(options.prefix ?? entity, id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
     const store = handle.hotMesh.engine.store;
@@ -750,7 +783,7 @@ class Pluck {
    * Deletes one or more fields from the remote function state.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - the job id
-   * @param {CallOptions} [options={}] - optional call options
+   * @param {CallOptions} [options={}] - call options
    * 
    * @returns {Promise<number>} - the count of fields deleted
    * @example
@@ -758,7 +791,7 @@ class Pluck {
    * const count = await pluck.del('greeting', 'jdoe', { fields: ['fred', 'barney'] });
    */
   async del(entity: string, id: string, options: CallOptions): Promise<number>{
-    const workflowId = this.mintGuid(options.prefix ?? entity, id);
+    const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     if (!Array.isArray(options.fields)) {
       throw "Invalid arguments [options.fields is not an array]";
@@ -885,8 +918,8 @@ class Pluck {
    * Creates a search index for the specified entity (FT.search). The index
    * must be removed by calling `FT.DROP_INDEX` directly in Redis.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {CallOptions} [options={}] - optional call options
-   * @param {WorkflowSearchOptions} [searchOptions] - optional search options
+   * @param {CallOptions} [options={}] - call options
+   * @param {WorkflowSearchOptions} [searchOptions] - search options
    * @returns {Promise<string>} - the search index name
    * @example
    * // create a search index for the 'greeting' entity. pass in search options.
@@ -904,7 +937,7 @@ class Pluck {
   /**
    * Wrap activities in a proxy that will durably run them, once.
    */
-  static once = Durable.workflow.proxyActivities;
+  static proxyActivities = Durable.workflow.proxyActivities;
 
   /**
    * shut down Pluck (typically on sigint or sigterm)

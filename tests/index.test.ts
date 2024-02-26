@@ -1,4 +1,4 @@
-import * as Redis from 'redis';
+import Redis from 'ioredis';
 
 import config from './$setup/config';
 import * as activities from './activities';
@@ -8,13 +8,13 @@ import { StringStringType, WorkflowSearchOptions } from '@hotmeshio/hotmesh/buil
 
 describe('Pluck`', () => {
   const options = {
-    socket: {
+    //socket: {
       host: config.REDIS_HOST,
       port: config.REDIS_PORT,
-      tls: false,
-    },
+      //tls: false,
+    //},
     password: config.REDIS_PASSWORD,
-    database: config.REDIS_DATABASE,
+    db: config.REDIS_DATABASE,
   };
 
   //configure pluck instance will full set of options
@@ -35,8 +35,8 @@ describe('Pluck`', () => {
     } as WorkflowSearchOptions
   );
 
-  //wrap expensive/idempotent functions using `once` flag
-  const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
+  //wrap expensive/idempotent functions with a proxy
+  const { sendNewsLetter } = Pluck.proxyActivities<typeof activities>({ activities });
 
   const entityName = 'greeting';
   const idemKey = HotMesh.guid();
@@ -60,11 +60,10 @@ describe('Pluck`', () => {
     const search = await Pluck.workflow.search();
     await search?.set('email', email, 'newsletter', 'yes');
 
-    //sendNewsletter is a proxy function and will only run once
+    //`sendNewsletter` is a proxy function and will only run once
     //prove by calling three times (but using the cached instance for the last 2)
     for (let i = 1; i < 4; i++) {
       const cachedI = await sendNewsLetter(email, i);
-      //console.log('outgoing count', email, i, cachedI);
     }
 
     //spawn the `sendRecurringNewsLetter` hook (a parallel subroutine)
@@ -74,7 +73,6 @@ describe('Pluck`', () => {
         workflowName: 'subscribe',
         taskQueue: 'subscribe',
       });
-      //console.log('hooked a newsletter with id >', msgId);
     }
     return `Hello, ${user.first} ${user.last}. Your email is [${email}].`;
   }
@@ -86,12 +84,11 @@ describe('Pluck`', () => {
   const sleeper = async (email: string) => {
     for (let i = 1; i < 4; i++) {
       const cachedI = await sendNewsLetter(email, i);
-      //console.log('SLEEPER MISALIGN?', email, i, cachedI);
       await Pluck.workflow.sleepFor('1 second');
     }
   }
 
-  //once connected by pluc, this function will become a 'hook'
+  //once connected by pluck, this function will become a 'hook'
   //hook functions are reentrant processes and use the job
   //state its bound to when initialized.
   const sendRecurringNewsLetter = async () => {
@@ -101,7 +98,6 @@ describe('Pluck`', () => {
     let shouldProceed: boolean;
     do {
       email = await search.get('email');
-      //console.log('hook now running; send newsletter to >', email);
 
       //the 'sendNewsLetter' function is a `proxy` and will only run once
       await sendNewsLetter(email);
@@ -110,23 +106,28 @@ describe('Pluck`', () => {
       await search.set('newsletter', 'no');
       shouldProceed = await search.get('newsletter') === 'yes';
     } while(shouldProceed);
-    //console.log('hook now exiting; shouldProceed >', email, shouldProceed);
   }
 
   //another hook function to unsubscribe from the newsletter
   const unsubscribeFromNewsLetter = async (reason: string) => {
     const search = await Pluck.workflow.search();
     const email = await search.get('email');
-    //console.log('hook running; unsubscribe? >', email, 'no', reason);
-    await search.set('newsletter', 'no', 'reason', reason);
-    //console.log('hook exiting; unsubscribed? >', 'done');
+    await search.set('newsletter', 'no', 'reason', reason, 'email', email);
   }
 
   beforeAll(async () => {
     // init Redis and flush db
-  });
+    const client = new Redis(options);
+    await client.flushall();
+    await client.quit();
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+  }, 5_000);
 
   afterAll(async () => {
+    //wait for cleanup (various asyn processes should be allowed to complete)
+    //todo: verify that memory space is empty
+    await new Promise((resolve) => setTimeout(resolve, 25_000));
+    //shutdown all connections
     await Pluck.shutdown();
   }, 30_000);
     
@@ -185,19 +186,21 @@ describe('Pluck`', () => {
             }
           },
           id: 'jdoe',
+          ttl: '30 seconds',
         }});
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
       expect(brokered).toEqual(direct);
-      //NOTE: job 'jdoe' is not cached (does not have a ttl);
-      //      but it does have an 'id' and before it gets
-      //      garbage collected in 2 minutes, the unit tests
-      //      that follow will access shared job state, using
-      //      raw Redis commands to test speed and accuracy
-      //      of merging data in motion (process data) and
-      //      data at rest (state data), as both are saved
-      //      to the same unidimensional Redis HASH.
+    });
+
+    it('should return RAW fields (HGETALL)', async () => {
+      const email = 'jdoe@pluck.com';
+      const name = {first: 'John', last: 'Doe'};
+      const direct = await localGreet(email, name);
+      const raw = await pluck.raw('greeting', 'jdoe');
+      expect(raw._fred).toEqual('flintstone');
+      expect(raw.aBa).toEqual(`/s\"${direct}\"`);
     });
 
     it('should only run proxy functions one time', async () => {
@@ -207,14 +210,6 @@ describe('Pluck`', () => {
       });
     }, 20_000);
 
-    it('should return RAW fields (HGETALL)', async () => {
-      const email = 'jdoe@pluck.com';
-      const name = {first: 'John', last: 'Doe'};
-      const direct = await localGreet(email, name);
-      const raw = await pluck.raw('greeting', 'jdoe');
-      expect(raw._fred).toEqual('flintstone');
-      expect(raw.aBa).toEqual(direct);
-    });
 
     it('should return ALL `state` fields', async () => {
       const all = await pluck.all('greeting', 'jdoe');
@@ -292,9 +287,8 @@ describe('Pluck`', () => {
       let pluckResponse: JobOutput;
       try {
         pluckResponse = await pluck.info('greeting', 'abc456');
-        console.log('job data (info) >', pluckResponse);
       } catch (error) {
-        expect(error.message).toBe(`Job greeting-abc456 not found`);
+        expect(error.message).toBe(`greeting-abc456 Not Found`);
         return;
       }
       expect(pluckResponse.data.done).toEqual(true);
@@ -312,7 +306,7 @@ describe('Pluck`', () => {
       const brokered = await pluck.exec<Promise<string>>({
         entity: 'greeting',
         args: [email, name],
-        options: { id: idemKey }
+        options: { id: idemKey, ttl: '20 seconds' }
       });
       expect(errorCount).toEqual(2);
       expect(shouldThrowError).toBeFalsy();
@@ -326,13 +320,8 @@ describe('Pluck`', () => {
 
   describe('info', () => {
     it('should return the full function profile', async () => {
-      try {
-        const pluckResponse = await pluck.info('greeting', idemKey);
-        expect(pluckResponse.data.done).toEqual(true);
-      } catch (error) {
-        console.log('error', error);
-        expect(error.message).toBe(`Job greeting-${idemKey} not found`);
-      }
+      const pluckResponse = await pluck.info('greeting', idemKey);
+      expect(pluckResponse.data.done).toEqual(true);
     });
   });
 
@@ -350,6 +339,8 @@ describe('Pluck`', () => {
       expect(hookId).toBeDefined();
       //hooks are async; sleep to allow the hook to run
       await new Promise((resolve) => setTimeout(resolve, 1_000));
+      const pluckResponse = await pluck.info('greeting', idemKey);
+
       //by now the data should have been updated to 'no'
       pluckData = await pluck.all('greeting', idemKey);
       expect(pluckData.newsletter).toEqual('no');
@@ -381,7 +372,7 @@ describe('Pluck`', () => {
           return: ['email', 'newsletter', 'reason']
       }) as {count: number, data: StringStringType[]};
       //most recent result includes a reason
-      console.log('Indexed Search Results >', indexedResults);
+      //console.log('Indexed Search Results >', indexedResults);
       expect(indexedResults.data.length).toBeGreaterThan(0);
       expect(indexedResults.data[indexedResults.data.length - 1].newsletter).toEqual('no');
       expect(indexedResults.data[indexedResults.data.length - 1].reason).toEqual(reason);
@@ -394,7 +385,7 @@ describe('Pluck`', () => {
             { field: 'newsletter', is: '=', value: 'no' }
           ],
           return: ['email', 'newsletter', 'reason'],
-          limit: { start: 1, size: 1} // 0-based index (get second result)
+          limit: { start: 0, size: 1} // 0-based index (get first result)
       }) as {count: number, data: StringStringType[]};
       //most recent result includes a reason
       expect(indexedResults.data.length).toBeGreaterThanOrEqual(1); //`max count` is 1 less than `return count`
@@ -409,7 +400,6 @@ describe('Pluck`', () => {
           ],
           count: true
       }) as number;
-      //console.log('search count >', count);
       expect(count).toBeGreaterThan(0);
     });
   });

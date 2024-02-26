@@ -106,11 +106,11 @@ During this time you can bind *Hooks* to extend your function. Hooks are *subord
 
 ```javascript
 function greet (email: string, first: string) {
-  //persist user data via `workflow.search`
+  //persist custom data data using `workflow.search`
   const search = await Pluck.workflow.search();
   await search.set('email', email, 'newsletter', 'yes');
 
-  //kick off a recurring subflow using `workflow.hook`
+  //start off a transactional subflow using `workflow.hook`
   await Pluck.workflow.hook({
     entity: 'newsletter.subscribe',
     args: []
@@ -122,7 +122,7 @@ function greet (email: string, first: string) {
 ```
 
 ### Hooks
-The `newsLetter` hook function shows a few additional workflow extensions. It uses the `search` method to access the user's email and the `once` method to wrap a legacy activity (e.g., `sendNewsLetter`). It also includes a method you wouldn't expect: *it sleeps for a month*. Becuase functions run as *reentrant process*, sleeping is a natural part of the workflow. 
+The `newsLetter` hook function shows a few additional workflow extensions. It uses the `search` method to access the user's email and the `proxyActivities` method to wrap a legacy activity (e.g., `sendNewsLetter`). It also includes a method you wouldn't expect: *it sleeps for a month*. Becuase functions run as *reentrant process*, sleeping is a natural part of the workflow. 
 
 *Set up recurring workflows without reliance on external schedulers and cron jobs.*
 
@@ -131,7 +131,7 @@ import { Pluck } from '@hotmeshio/pluck';
 import * as activities from './activities';
 
 //wrap/proxy the legacy activity (so it runs once)
-const { sendNewsLetter } = Pluck.once<typeof activities>({ activities });
+const { sendNewsLetter } = Pluck.proxyActivities<typeof activities>({ activities });
 
 const newsLetter = async () => {
   //read user data via `Worflow.search`
@@ -139,7 +139,7 @@ const newsLetter = async () => {
   while (await search.get('newsletter') === 'yes') {
     const email = await search.get('email');
     
-    //send legacy functions ONCE via `Pluck.once`
+    //call the legacy function
     await sendNewsLetter(email);
 
     //sleep durably using `Worflow.sleepFor`
@@ -154,9 +154,9 @@ pluck.connect({
 });
 ```
 
->💡If you are familiar with durable workflow engines like Temporal, you'll recognize the need to wrap (i.e., "proxy") activities, so they run *once*. Pluck provides the `once` method to do this. What's important is that it is wrapped, so it only ever gets called *one time* during the life of the workflow.
+>💡If you are familiar with durable workflow engines like Temporal, you'll recognize the need to wrap (i.e., "proxy") activities, so they run *once*. Pluck provides the `proxyActivities` method to do this. What's important is that the function is wrapped, so it only ever gets called *one time* during the life of the workflow.
 
-Cancelling the subscription is equally straightforward: create and connect a function that sets `newsletter` to `no` and saves a `reason`.
+Cancelling the subscription is equally straightforward: create and connect a hook function that sets `newsletter` to `no` and saves a `reason`.
 
 ```javascript
 pluck.connect({
@@ -177,6 +177,14 @@ await pluck.hook({
   hookEntity: 'newsletter.unsubscribe',
   hookArgs: ['too much talk'],
 });
+```
+
+>In general, hooks are used to wrap transactional operations. In this case, since the hook is only setting values, the task can be accomplished by calling `pluck.set` directly, instead of calling `pluck.hook` and then calling `set` from within the hook. *The `hook` method is more useful when you need to wrap multiple operations in a single transaction.*
+
+```javascript
+//set newsletter prefs to no; save the reason
+const data = { newsletter: 'no', reason: 'too much talk' };
+await pluck.set('greeting', 'jsmith', { search: { data } });
 ```
 
 ### Enhancing Functionality with Workflow Extensions
@@ -204,6 +212,10 @@ Workflow extension methods are available to your operationalized functions.
  - `random` Generate a deterministic random number that can be used in a reentrant process workflow (replaces `Math.random()`).
     ```javascript
     const random = await Pluck.workflow.random();
+    ```
+ - `once` Execute a function once and only once. *This is a light-weight replacement for proxyActivities that executes without CQRS indirection. No setup is needed as is required for proxyActivities; call any function as shown.* In the following example, the sendNewsletter function is called once and only once, and the `user_id` and `email` fields are the input arguments.
+    ```javascript
+    const result = await Pluck.workflow.once<string>(sendNewsletter, user_id, email);
     ```
  - `executeChild` Call another durable function and await the response. *Design sophisticated, multi-process solutions by leveraging this command.*
     ```javascript

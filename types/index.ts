@@ -277,6 +277,15 @@ export type StringAnyType = {
   [key: string]: any;
 };
 
+export type Model = {
+  [key: string]: {
+    type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+    required?: boolean;
+    default?: any;
+    nullable?: boolean; //if true, the field can be set to null
+  };
+};
+
 export type StringStringType = {
   [key: string]: string;
 };
@@ -311,6 +320,33 @@ export type JobMetadata = {
     err?: string;
     expire?: number;
 };
+
+
+export type JobInterruptOptions = {
+  /**
+   * Optional reason when throwing the error 
+   */
+  reason?: string;
+  /**
+   * default is `true` when `undefined` (throw JobInterrupted/410 error)
+   */
+  throw?: boolean;
+  /** 
+   * default behavior is `false` when `undefined` (do NOT interrupt child jobs)
+   */
+  descend?: boolean;
+  /**
+   * default is false; if true, errors related to inactivation (like overage...already inactive) are suppressed/ignored
+   */
+  suppress?: boolean;
+  /**
+   * how long to wait in seconds before fully expiring/removing the hash from Redis; 
+   * the job is inactive, but can remain in the cache indefinitely;
+   * minimum 1 second
+   */
+  expire?: number;
+};
+
 
 export type JobStatus = number;
 
