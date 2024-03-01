@@ -16,6 +16,7 @@ import {
   WorkflowSearchOptions, 
   Model } from '../types';
 import { RedisClass, RedisOptions } from '../types/redis';
+import { KeyType } from '@hotmeshio/hotmesh/build/modules/key';
 
 /**
  * Pluck wraps the HotMesh `Durable` classes
@@ -64,12 +65,12 @@ class Pluck {
   redisClass: RedisClass;
 
   /**
-   * Optional model declaration (custom workflow state)
+   * Model declaration (all fields and types)
    */
   model: Model;
 
   /**
-   * Optional configuration for Redis FT search
+   * Redis FT search configuration (indexed/searchable fields and types)
    */
   search: WorkflowSearchOptions;
 
@@ -84,7 +85,7 @@ class Pluck {
    *   const search = await Pluck.workflow.search();
    *   await search.set('email', email, 'newsletter', 'yes');
 
-   *   //set up a recurring newsletter subscription using a 'hook'
+   *   //call a 'hook' (it runs parallel to the main workflow and shares state)
    *   await Pluck.workflow.hook({
    *     workflowName: 'newsletter.subscribe',
    *     taskQueue: 'newsletter.subscribe',
@@ -198,7 +199,7 @@ class Pluck {
    * @private
    */
   arrayToHash(input: [number, ...Array<string | string[]>]): StringStringType[] {
-    const [count, ...rest] = input;
+    const [_count, ...rest] = input;
     const max = rest.length / 2
     const hashes: StringStringType[] = [];
     // Process each item to convert into a hash object
@@ -244,14 +245,14 @@ class Pluck {
    * @returns {Promise<string>}
    * @example
    * // mint a key
-   * const key = await pluck.mintKey('greeting', '12345');
+   * const key = await pluck.mintKey('greeting', 'jsmith123');
    * 
-   * // returns 'hmsh:durable:j:-greeting-12345'
+   * // returns 'hmsh:durable:j:greeting-jsmith123'
    */
   async mintKey(entity: string, workflowId: string): Promise<string> {
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
     const store = handle.hotMesh.engine.store;
-    return store.mintKey(4, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
+    return store.mintKey(KeyType.JOB_STATE, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
   }
 
   /**
@@ -272,6 +273,7 @@ class Pluck {
    * const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
    * 
    * // Define and connect a function with the 'greeting' entity.
+   * // The function will be cached indefinitely (infinite TTL).
    * pluck.connect({
    *   entity: 'greeting',
    *   target: (email, user) => `Hello, ${user.first}.`,
@@ -349,7 +351,7 @@ class Pluck {
     if (options?.ttl && options.$type === 'exec') {
       const hotMesh = await Pluck.workflow.getHotMesh();
       const store = hotMesh.engine.store;
-      const jobKey = store.mintKey(4, { jobId: options.$guid, appId: hotMesh.engine.appId });
+      const jobKey = store.mintKey(KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine.appId });
       //publish the 'done' payload
       const jobResponse = ['aAa', '/t', 'aBa', `/s${JSON.stringify(result)}`];
       await store.exec('HSET', jobKey, ...jobResponse);
@@ -365,10 +367,8 @@ class Pluck {
   }
 
   /**
-   * Publishes the job result, because sleeping the job (in support of
-   * the 'ttl' option) interrupts the response. This provides a solution
-   * to both return the job result to the caller and to sleep to keep
-   * the job active.
+   * Publishes the job result, because pausing the job (in support of
+   * the 'ttl' option) interrupts the response.
    * 
    * @template T The expected return type of the remote function
    * 
@@ -381,7 +381,7 @@ class Pluck {
    */
   async publishDone<T>(result: T, hotMesh: HotMesh, options: CallOptions): Promise<void> {
     await hotMesh.engine.store.publish(
-      9, 
+      KeyType.QUORUM,
       {
         type: 'job',
         topic: `${hotMesh.engine.appId}.executed`,
@@ -419,7 +419,7 @@ class Pluck {
    * 
    * @example
    * // Flush a function
-   * await pluck.flush('greeting', '12345');
+   * await pluck.flush('greeting', 'jsmith123');
    */
   async flush(entity: string, id: string): Promise<string | void> {
     const workflowId = Pluck.mintGuid(entity, id);
@@ -445,7 +445,7 @@ class Pluck {
    * 
    * @example
    * // Interrupt a function
-   * await pluck.interrupt('greeting', '12345');
+   * await pluck.interrupt('greeting', 'jsmith123');
    * @param options 
    */
   async interrupt(entity: string, id: string, options: JobInterruptOptions = {}): Promise<void> {
@@ -470,7 +470,7 @@ class Pluck {
    * @returns {Promise<string>} - the signal id
    * @example
    * // Signal a function with a payload
-   * await pluck.signal('flush-greeting-12345', { message: 'down the drain!' });
+   * await pluck.signal('signal123', { message: 'hi!' });
    * 
    * // returns '123456732345-0' (redis stream message receipt)
    */
@@ -493,7 +493,7 @@ class Pluck {
    * // Hook a function
    * const signalId = await pluck.hook({
    *   entity: 'greeting',
-   *   id: 'jdoe',
+   *   id: 'jsmith123',
    *   hookEntity: 'greeting.newsletter',
    *   hookArgs: ['xxxx@xxxxx'],
    *   options: {}
@@ -573,7 +573,7 @@ class Pluck {
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - identifier for the job
-   * @param {CallOptions} [options={}] - Optional. Configuration options for the execution,
+   * @param {CallOptions} [options={}] - Configuration options for the execution,
    *                                     including custom IDs, time-to-live (TTL) settings, etc.
    *                                     Defaults to an empty object if not provided.
    * 
@@ -593,7 +593,7 @@ class Pluck {
    *    tpc: 'durable.execute',
    *    app: 'durable',
    *    vrs: '1',
-   *    jid: 'greeting-job-12345',
+   *    jid: 'greeting-jsmith123',
    *    aid: 't1',
    *    ts: '0',
    *    jc: '20240208014803.980',
@@ -603,7 +603,7 @@ class Pluck {
    *   data: {
    *    done: true,
    *    response: 'Hello, Jan. Your email is [jsmith@pluck.com].',
-   *    workflowId: 'greeting-job-12345'
+   *    workflowId: 'greeting-jsmith123'
    *   }
    * }
    */
@@ -633,7 +633,7 @@ class Pluck {
    * 
    * @example
    * // get the state of a function
-   * const state = await pluck.get('greeting', 'jdoe', { fields: ['fred', 'barney'] });
+   * const state = await pluck.get('greeting', 'jsmith123', { fields: ['fred', 'barney'] });
    * 
    * // returns { fred: 'flintstone', barney: 'rubble' }
    */
@@ -677,7 +677,7 @@ class Pluck {
    * 
    * @example
    * // get the state of the job (this is not the response...this is job state)
-   * const state = await pluck.all('greeting', 'jdoe');
+   * const state = await pluck.all('greeting', 'jsmith123');
    * 
    * // returns { fred: 'flintstone', barney: 'rubble', ...  }
    */
@@ -710,9 +710,9 @@ class Pluck {
    * 
    * @example
    * // get the state of a function
-   * const state = await pluck.raw('greeting', 'jdoe');
+   * const state = await pluck.raw('greeting', 'jsmith123');
    * 
-   * // returns { : '0', _barney: 'rubble', aBa: 'Hello, John Doe. Your email is [jdoe@pluck].', ... }
+   * // returns { : '0', _barney: 'rubble', aBa: 'Hello, John Doe. Your email is [jsmith@pluck].', ... }
    */
   async raw(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
@@ -741,7 +741,7 @@ class Pluck {
    * @returns {Promise<number>} - count
    * @example
    * // set the state of a function
-   * const count = await pluck.set('greeting', 'jdoe', { search: { data: { fred: 'flintstone', barney: 'rubble' } } });
+   * const count = await pluck.set('greeting', 'jsmith123', { search: { data: { fred: 'flintstone', barney: 'rubble' } } });
    */
   async set(entity: string, id: string, options: CallOptions = {}): Promise<number> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
@@ -767,7 +767,7 @@ class Pluck {
    * @returns {Promise<number>} - the new value
    * @example
    * // increment a field in the function state
-   * const count = await pluck.incr('greeting', 'jdoe', 'counter', 1);
+   * const count = await pluck.incr('greeting', 'jsmith123', 'counter', 1);
    */
   async incr(entity: string, id: string, field: string, amount: number, options: CallOptions = {}): Promise<number> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
@@ -788,7 +788,7 @@ class Pluck {
    * @returns {Promise<number>} - the count of fields deleted
    * @example
    * // remove two hash fields from the function state
-   * const count = await pluck.del('greeting', 'jdoe', { fields: ['fred', 'barney'] });
+   * const count = await pluck.del('greeting', 'jsmith123', { fields: ['fred', 'barney'] });
    */
   async del(entity: string, id: string, options: CallOptions): Promise<number>{
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);

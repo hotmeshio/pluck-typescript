@@ -300,9 +300,11 @@ export type ActivityData = {
 export type JobMetadata = {
     key?: string;
     jid: string;
+    gid: string;
     dad: string;
     aid: string;
     pj?: string;
+    pg?: string;
     pd?: string;
     pa?: string;
     ngn?: string;
