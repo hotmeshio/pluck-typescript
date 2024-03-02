@@ -1,4 +1,8 @@
-import { Durable, HotMesh, MeshOS } from '@hotmeshio/hotmesh';
+import {
+  Durable,
+  HotMesh,
+  MeshOS,
+  Types as HotMeshTypes } from '@hotmeshio/hotmesh';
 import {
   CallOptions,
   ConnectionInput,
@@ -10,13 +14,12 @@ import {
   HookInput,
   JobInterruptOptions,
   JobOutput,
+  Model,
   SearchResults,
   StringAnyType,
   StringStringType,
-  WorkflowSearchOptions, 
-  Model } from '../types';
+  WorkflowSearchOptions } from '../types';
 import { RedisClass, RedisOptions } from '../types/redis';
-import { KeyType } from '@hotmeshio/hotmesh/build/modules/key';
 
 /**
  * Pluck wraps the HotMesh `Durable` classes
@@ -237,6 +240,14 @@ class Pluck {
   }
 
   /**
+   * Returns a HotMesh client
+   */
+  async getHotMesh(): Promise<HotMesh> {
+    return await Durable.Client.instances?.values()?.next()?.value ??
+      await Durable.Worker.instances?.values()?.next().value;
+  }
+
+  /**
    * Returns the Redis HASH key given an `entity` name and workflow/job. The
    * item identified by this key is a HASH record with multidimensional process
    * data interleaved with the function state data.
@@ -252,7 +263,7 @@ class Pluck {
   async mintKey(entity: string, workflowId: string): Promise<string> {
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
     const store = handle.hotMesh.engine.store;
-    return store.mintKey(KeyType.JOB_STATE, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
+    return store.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
   }
 
   /**
@@ -351,7 +362,7 @@ class Pluck {
     if (options?.ttl && options.$type === 'exec') {
       const hotMesh = await Pluck.workflow.getHotMesh();
       const store = hotMesh.engine.store;
-      const jobKey = store.mintKey(KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine.appId });
+      const jobKey = store.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine.appId });
       //publish the 'done' payload
       const jobResponse = ['aAa', '/t', 'aBa', `/s${JSON.stringify(result)}`];
       await store.exec('HSET', jobKey, ...jobResponse);
@@ -381,7 +392,7 @@ class Pluck {
    */
   async publishDone<T>(result: T, hotMesh: HotMesh, options: CallOptions): Promise<void> {
     await hotMesh.engine.store.publish(
-      KeyType.QUORUM,
+      HotMeshTypes.KeyType.QUORUM,
       {
         type: 'job',
         topic: `${hotMesh.engine.appId}.executed`,
@@ -947,4 +958,5 @@ class Pluck {
   }
 };
 
-export { Pluck, Durable, HotMesh, MeshOS };
+export { Pluck, Durable, HotMesh, MeshOS, HotMeshTypes };
+export * as Types from '../types';

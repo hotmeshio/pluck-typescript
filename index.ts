@@ -1,1 +1,1 @@
-export { Pluck, Durable, HotMesh, MeshOS } from './services/pluck';
+export { Pluck, Durable, HotMesh, MeshOS, HotMeshTypes, Types } from './services/pluck';

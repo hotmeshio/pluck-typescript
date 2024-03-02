@@ -164,6 +164,15 @@ describe('Pluck`', () => {
     });
   });
 
+  describe('HotMesh Instance', () => {
+    it('should return a HotMesh Instance', async () => {
+      const instance = await pluck.getHotMesh();
+      expect(instance.engine).toBeDefined();
+      expect(instance.engine?.store).toBeDefined();
+      expect(instance.engine?.store?.redisClient).toBeDefined();
+    });
+  });
+
   describe('exec', () => {
     it('should exec a function and await the result', async () => {
       const email = 'jdoe@pluck.com';

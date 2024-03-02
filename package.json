@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/pluck",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Operationalize Your Data",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -19,7 +19,7 @@
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --fix --ext .ts",
     "start": "ts-node src/index.ts",
-    "test": "NODE_ENV=test jest --forceExit --verbose --detectOpenHandles",
+    "test": "NODE_ENV=test HMSH_LOGLEVEL=debug jest --forceExit --verbose --detectOpenHandles",
     "test:index": "NODE_ENV=test jest ./tests/index.test.ts --forceExit --verbose --detectOpenHandles"
   },
   "keywords": [
@@ -32,7 +32,7 @@
   "author": "luke.birdeau@gmail.com",
   "license": "Apache-2.0",
   "dependencies": {
-    "@hotmeshio/hotmesh": "^0.0.38"
+    "@hotmeshio/hotmesh": "^0.0.41"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

@@ -25,11 +25,13 @@ export type ConnectOptions = {
   search?: WorkflowSearchOptions;
 };
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
 export type WorkerOptions = {
   /**
    * debug, info, warn, error
    */
-  logLevel?: string;
+  logLevel?: LogLevel;
   /**
    * 1-3 (10ms, 100ms, 1_000ms)
    */
@@ -322,7 +324,6 @@ export type JobMetadata = {
     err?: string;
     expire?: number;
 };
-
 
 export type JobInterruptOptions = {
   /**
