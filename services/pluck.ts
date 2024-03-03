@@ -123,7 +123,7 @@ class Pluck {
 
   /**
    * 
-   * @param {any} redisClass - the Redis class/import (e.g, `ioredis`, `redis`)
+   * @param {RedisClass} redisClass - the Redis class/import (e.g, `ioredis`, `redis`)
    * @param {StringAnyType} redisOptions - the Redis connection options. These are specific to the package (refer to their docs!). Each uses different property names and structures. 
    * @param {StringAnyType} model - the data model (e.g, `{ name: { type: 'string' } }`)
    * @param {WorkflowSearchOptions} search - the Redis search options for JSON-based configuration of the Redis FT.Search module index
@@ -457,7 +457,6 @@ class Pluck {
    * @example
    * // Interrupt a function
    * await pluck.interrupt('greeting', 'jsmith123');
-   * @param options 
    */
   async interrupt(entity: string, id: string, options: JobInterruptOptions = {}): Promise<void> {
     const workflowId = Pluck.mintGuid(entity, id);
