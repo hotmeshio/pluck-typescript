@@ -387,7 +387,8 @@ export type FindOptions = {
 export type FindWhereOptions = {
   options?: FindOptions;
   count?: boolean;
-  query: FindWhereQuery[];
+  /** if null or empty, all index results will be paginated/returned. */
+  query?: FindWhereQuery[];
   return?: string[];
   limit?: {
       start: number;

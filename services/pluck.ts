@@ -889,11 +889,14 @@ class Pluck {
 
   /**
    * Generates a search query from a FindWhereQuery array
-   * @param {FindWhereQuery[]} query
+   * @param {FindWhereQuery[]} [query]
    * @returns {string}
    * @private
    */
   generateSearchQuery(query: FindWhereQuery[]): string {
+    if (!Array.isArray(query) || query.length === 0) {
+      return '*';
+    }
     const my = this;
     let queryString = query.map(q => {
       const { field, is, value, type } = q;
