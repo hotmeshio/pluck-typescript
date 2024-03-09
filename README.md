@@ -145,7 +145,7 @@ pluck.connect({
 });
 ```
 
-Invoking hooks is straightforward. The following calls the `user.bill` hook, running it as a subordinated transaction, bound to the user, `jsmith123`. Hooks provide a reliable way to extend the functionality of the main workflow to which their bound.
+Invoking hooks is straightforward. The following calls the `user.bill` hook, running it as a subordinated transaction, bound to the user, `jsmith123`. Hooks provide a reliable way to extend the functionality of the main workflow to which they are bound.
 
 ```javascript
 //invoke the `user.bill` hook function
