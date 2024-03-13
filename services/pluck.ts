@@ -16,6 +16,7 @@ import {
   JobInterruptOptions,
   JobOutput,
   Model,
+  RollCallOptions,
   SearchResults,
   StringAnyType,
   StringStringType,
@@ -74,9 +75,9 @@ class Pluck {
   model: Model;
 
   /**
-   * Cached local instance of HotMesh
+   * Cached local instances (map) of HotMesh organized by namespace
    */
-  hotMesh: Promise<HotMesh> | HotMesh | undefined;
+  instances: Map<string, (Promise<HotMesh> | HotMesh)> = new Map();
 
   /**
    * Redis FT search configuration (indexed/searchable fields and types)
@@ -251,9 +252,10 @@ class Pluck {
    */
   async getHotMesh(namespace: string = 'durable'): Promise<HotMesh> {
     //try to reuse an existing client
-    let hotMesh = await this.hotMesh;
+    let hotMesh: HotMesh | Promise<HotMesh> | undefined = 
+      await this.instances.get(namespace);
     if (!hotMesh) {
-      this.hotMesh = HotMesh.init({
+      hotMesh = HotMesh.init({
         appId: namespace,
         engine: {
           redis: {
@@ -262,7 +264,9 @@ class Pluck {
           }
         }
       });
-      hotMesh = this.hotMesh = await this.hotMesh;
+      this.instances.set(namespace, hotMesh);
+      hotMesh = await hotMesh;
+      this.instances.set(namespace, hotMesh);
     }
     return hotMesh;
   }
@@ -506,6 +510,19 @@ class Pluck {
    */
   async signal(guid: string, payload: StringAnyType): Promise<string> {
     return await this.getClient().workflow.signal(guid, payload);
+  }
+
+  /**
+   * Sends a signal to the backend Service Mesh (workers and engines)
+   * to announce their presence, including message counts, target
+   * functions, topics, etc. This is useful for establishing
+   * the network profile and overall message throughput
+   * of the operational data layer as a unified quorum.
+   * @param {RollCallOptions} options 
+   * @returns {Promise<HotMeshTypes.QuorumProfile[]>}
+   */
+  async rollCall(options: RollCallOptions = {}): Promise<HotMeshTypes.QuorumProfile[]> {
+    return (await this.getHotMesh(options.namespace || 'durable')).rollCall(options.delay || 1000);
   }
 
   /**

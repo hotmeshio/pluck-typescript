@@ -4,7 +4,7 @@ import config from './$setup/config';
 import * as activities from './activities';
 import {Pluck, HotMesh } from '../index';
 import { JobOutput } from '@hotmeshio/hotmesh/build/types/job';
-import { StringStringType, WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
+import { StringStringType, WorkflowContext, WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
 
 describe('Pluck`', () => {
   const options = {
@@ -44,6 +44,10 @@ describe('Pluck`', () => {
   let errorCount = 0;
   let callCount = 0;
   const reason = 'I am tired of newsletters';
+
+  const howdy = async (): Promise<WorkflowContext> => {
+    return Pluck.workflow.getContext();
+  }
 
   const greet = async (email: string, user: { first: string, last: string}): Promise<string> => {
     callCount++;
@@ -147,6 +151,16 @@ describe('Pluck`', () => {
       expect(sleeperWorker).toBeDefined();
     });
 
+    it('should connect a function and isolate the namespace', async () => {
+      const worker = await pluck.connect<Promise<WorkflowContext>>({
+        entity: 'howdy',
+        target: howdy,
+        options: { namespace: 'staging' }
+      });
+      expect(worker).toBeDefined();
+    });
+
+
     it('should connect a hook function', async () => {
       const worker = await pluck.connect({
         entity: 'subscribe',
@@ -174,6 +188,19 @@ describe('Pluck`', () => {
   });
 
   describe('exec', () => {
+    it('should exec a function at a custom namespace', async () => {
+      const context = await pluck.exec<WorkflowContext>({
+        entity: 'howdy',
+        args: [],
+        options: { namespace: 'staging' },
+      });
+      expect(context.counter).toEqual(0);
+      expect(context.namespace).toEqual('staging');
+      expect(context.workflowId).toBeDefined();
+      expect(context.workflowDimension).toEqual(''); //main context, no dimension
+      expect(context.workflowTopic).toEqual('howdy-howdy');
+    });
+
     it('should exec a function and await the result', async () => {
       const email = 'jdoe@pluck.com';
       const name = {first: 'John', last: 'Doe'};
@@ -334,6 +361,19 @@ describe('Pluck`', () => {
     });
   });
 
+  describe('rollCall', () => {
+    it('should rollCall multiple namespaces', async () => {
+      const pluckResponse = await pluck.rollCall({
+        delay: 2500
+      });
+      expect(pluckResponse.length).toBeGreaterThan(10);
+      const pluckNamespaceResponse = await pluck.rollCall({
+        namespace: 'staging',
+        delay: 1000
+      });
+    });
+  });
+
   describe('hook', () => {
     it('should call the `unsubscribe` hook function', async () => {
       let pluckData = await pluck.all('greeting', idemKey);
@@ -360,7 +400,7 @@ describe('Pluck`', () => {
   describe('export', () => {
     it('should export the job timelines, actions, and dependencies', async () => {
       const exported = await pluck.export('greeting', idemKey);
-      console.log(JSON.stringify(exported, null, 2));
+      //console.log(JSON.stringify(exported, null, 2));
       expect(exported.state.data.response).toEqual('Hello, Jim Doe. Your email is [jim.doe@pluck.com].');
     });
   });

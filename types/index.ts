@@ -263,16 +263,44 @@ export type WorkflowConfig = {
 };
 
 export type CallOptions = {
-  ttl?: string;
-  flush?: boolean;
+  /**
+   * if provided along with a `ttl`, the function will be cached
+   */
   id?: string;
-  $guid?: string; //full GUID (including prefix)
-  $type?: string; // exec, hook, proxy
-  await?: boolean; //if set to false explicitly it will not await the result
-  taskQueue?: string; //optional taskQueue for the workflowId (defaults to entity)
-  prefix?: string; //optional prefix for the workflowId (defaults to entity)
+  /**
+   * in format '1 minute', '5 minutes', '1 hour', 'infinity', etc
+   */
+  ttl?: string;
+  /**
+   * full GUID (including prefix)
+   */
+  $guid?: string;
+  /**
+   * exec, hook, proxy
+   */
+  $type?: string;
+  /**
+   * if set to false explicitly it will not await the result
+   */
+  await?: boolean;
+  /**
+   * taskQueue for the workflowId (defaults to entity)
+   */
+  taskQueue?: string;
+  /**
+   * defaults to `entity` input parameter; allows override of the workflowId prefix
+   */
+  prefix?: string;
   search?: WorkflowSearchOptions;
-  fields?: string[]; //list of  state field names to return (this is NOT the final response)
+  /**
+   * list of  state field names to return (this is NOT the final response)
+   */
+  fields?: string[];
+  /**
+   * namespace for the the execution client; how it appears in Redis (defaults to 'durable')
+   */
+  namespace?: string; //optional namespace for the workflowId (defaults to 'durable')
+  flush?: boolean;
 };
 
 export type StringAnyType = {
@@ -367,6 +395,11 @@ export type JobState = {
 export type JobOutput = {
     metadata: JobMetadata;
     data: JobData;
+};
+
+export type RollCallOptions = {
+  delay?: number;
+  namespace?: string;
 };
 
 export type FindWhereQuery = {
