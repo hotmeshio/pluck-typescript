@@ -7,6 +7,7 @@ import {
   CallOptions,
   ConnectionInput,
   ConnectOptions,
+  DurableJobExport,
   ExecInput,
   FindWhereOptions,
   FindOptions,
@@ -71,6 +72,11 @@ class Pluck {
    * Model declaration (all fields and types)
    */
   model: Model;
+
+  /**
+   * Cached local instance of HotMesh
+   */
+  hotMesh: Promise<HotMesh> | HotMesh | undefined;
 
   /**
    * Redis FT search configuration (indexed/searchable fields and types)
@@ -241,10 +247,24 @@ class Pluck {
 
   /**
    * Returns a HotMesh client
+   * @param {string} [namespace='durable'] - the namespace for the client
    */
-  async getHotMesh(): Promise<HotMesh> {
-    return await Durable.Client.instances?.values()?.next()?.value ??
-      await Durable.Worker.instances?.values()?.next().value;
+  async getHotMesh(namespace: string = 'durable'): Promise<HotMesh> {
+    //try to reuse an existing client
+    let hotMesh = await this.hotMesh;
+    if (!hotMesh) {
+      this.hotMesh = HotMesh.init({
+        appId: namespace,
+        engine: {
+          redis: {
+            class: this.redisClass,
+            options: this.redisOptions,
+          }
+        }
+      });
+      hotMesh = this.hotMesh = await this.hotMesh;
+    }
+    return hotMesh;
   }
 
   /**
@@ -623,6 +643,25 @@ class Pluck {
 
     const handle = await this.getClient().workflow.getHandle(options.taskQueue ?? entity, entity, workflowId);
     return await handle.hotMesh.getState(`${handle.hotMesh.appId}.execute`, handle.workflowId);
+  }
+
+  /**
+   * Exports the job profile for the function execution, including
+   * all state, process, and timeline data. The information in the export
+   * is sufficient to capture the full state of the function in the moment
+   * and over time.
+   * 
+   * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
+   * @param {string} id - The workflow/job id
+   * 
+   * @example
+   * // Export a function
+   * await pluck.export('greeting', 'jsmith123');
+   */
+  async export(entity: string, id: string): Promise<DurableJobExport> {
+    const workflowId = Pluck.mintGuid(entity, id);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    return await handle.export();
   }
 
   /**

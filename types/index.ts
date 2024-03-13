@@ -395,3 +395,36 @@ export type FindWhereOptions = {
       size: number;
   };
 };
+export interface ActivityAction {
+  action: string;
+  target: string;
+}
+export interface JobTimeline {
+  activity: string;
+  dimension: string;
+  duplex: 'entry' | 'exit';
+  timestamp: string;
+  actions?: ActivityAction[];
+}
+export interface DependencyExport {
+  type: string;
+  topic: string;
+  gid: string;
+  jid: string;
+}
+export interface ExportTransitions {
+  [key: string]: string[];
+}
+export interface ExportCycles {
+  [key: string]: string[];
+}
+
+export interface DurableJobExport {
+  data: StringAnyType;
+  dependencies: DependencyExport[];
+  state: StringAnyType;
+  status: string;
+  timeline: JobTimeline[];
+  transitions: ExportTransitions;
+  cycles: ExportCycles;
+};

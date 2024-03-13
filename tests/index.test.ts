@@ -348,12 +348,20 @@ describe('Pluck`', () => {
       expect(hookId).toBeDefined();
       //hooks are async; sleep to allow the hook to run
       await new Promise((resolve) => setTimeout(resolve, 1_000));
-      const pluckResponse = await pluck.info('greeting', idemKey);
+      await pluck.info('greeting', idemKey);
 
       //by now the data should have been updated to 'no'
       pluckData = await pluck.all('greeting', idemKey);
       expect(pluckData.newsletter).toEqual('no');
       expect(pluckData.reason).toEqual(reason);
+    });
+  });
+
+  describe('export', () => {
+    it('should export the job timelines, actions, and dependencies', async () => {
+      const exported = await pluck.export('greeting', idemKey);
+      console.log(JSON.stringify(exported, null, 2));
+      expect(exported.state.data.response).toEqual('Hello, Jim Doe. Your email is [jim.doe@pluck.com].');
     });
   });
 
