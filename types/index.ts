@@ -402,6 +402,18 @@ export type RollCallOptions = {
   namespace?: string;
 };
 
+export type ThrottleOptions = {
+  /** target an engine OR worker by GUID */
+  guid?: string;
+  /** target a worker quorum */
+  topic?: string;
+  /** in milliseconds; default is 0 */
+  throttle: number;
+  /** application namespace */
+  namespace?: string;
+};
+
+
 export type FindWhereQuery = {
   field: string;
   is: '=' | '==' | '>=' | '<=' | '[]';

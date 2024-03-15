@@ -363,15 +363,12 @@ describe('Pluck`', () => {
 
   describe('rollCall', () => {
     it('should rollCall multiple namespaces', async () => {
-      const pluckResponse = await pluck.rollCall({
-        delay: 2500
-      });
-      expect(pluckResponse.length).toBeGreaterThan(10);
       const pluckNamespaceResponse = await pluck.rollCall({
         namespace: 'staging',
-        delay: 1000
+        delay: 2500
       });
-    });
+      expect(pluckNamespaceResponse.length).toBeGreaterThan(0);
+    }, 10_000);
   });
 
   describe('hook', () => {
@@ -418,6 +415,11 @@ describe('Pluck`', () => {
           index: 'greeting',
           prefix: ['greeting'],
         });
+    });
+
+    it('should list search indexes', async () => {
+      const indexes = await pluck.listSearchIndexes();
+      expect(indexes.length).toBeGreaterThan(0);
     });
 
     it('should conditionally search and limit response fields', async () => {

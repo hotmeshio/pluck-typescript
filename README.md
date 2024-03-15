@@ -1,7 +1,7 @@
 # Pluck
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-Call any function from anywhere, reliably and durably. *Pluck operationalizes your functions with Redis-backed governance.*
+Call any function from anywhere, reliably and durably. *Pluck unifies your most important functions into an Operational Data Layer.*
 
 
 ## Install
@@ -96,7 +96,8 @@ const response = await pluck.exec({
   options: { id: 'jsmith123', ttl: 'infinity' },
 });
 
-//returns { id: 'jsmith123', name: 'Jan Smith', ... } AND REMAINS ACTIVE
+//returns cached { id: 'jsmith123', name: 'Jan Smith', ... }
+// AND REMAINS ACTIVE!
 ```
 
 ## Operationalize Your Functions: Data in Motion

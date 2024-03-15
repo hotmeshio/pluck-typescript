@@ -20,7 +20,8 @@ import {
   SearchResults,
   StringAnyType,
   StringStringType,
-  WorkflowSearchOptions } from '../types';
+  WorkflowSearchOptions, 
+  ThrottleOptions} from '../types';
 import { RedisClass, RedisOptions } from '../types/redis';
 
 /**
@@ -526,6 +527,23 @@ class Pluck {
   }
 
   /**
+   * Throttles a worker or engine in the backend Service Mesh, using either
+   * a 'guid' to target a specific worker or engine, or a 'topic' to target
+   * a group of worker(s) connected to that topic. The throttle value is
+   * specified in milliseconds and will cause the target(s) to delay consuming
+   * the next message by this amount. By default, the value is set to `0`.
+   * @param {ThrottleOptions} options
+   * @returns {Promise<boolean>}
+   * 
+   * @example
+   * // Throttle a worker or engine
+   * await pluck.throttle({ guid: '1234567890', throttle: 10_000 });
+   */
+  async throttle(options: ThrottleOptions): Promise<boolean> {
+    return (await this.getHotMesh(options.namespace || 'durable')).throttle(options as HotMeshTypes.ThrottleOptions);
+  }
+
+  /**
    * Similar to `exec`, except it augments the workflow state without creating a new job.
    * 
    * @param {object} input - The input parameters for hooking a function.
@@ -562,7 +580,7 @@ class Pluck {
   /**
    * Executes a remote function by its global entity identifier with specified arguments.
    * If options.ttl is infinity, the function will be cached indefinitely and can only be
-   * removed by calling `flush`. During this time, the function will remain active and can
+   * removed by calling `flush`. During this time, the function will remain active and
    * its state can be augmented by calling `set`, `incr`, `del`, etc OR by calling a
    * transactional 'hook' function.
    * 
@@ -1001,6 +1019,21 @@ class Pluck {
     const workflowTopic = `${options.taskQueue ?? entity}-${entity}`;
     const hotMeshClient = await this.getClient().getHotMeshClient(workflowTopic);
     return await Durable.Search.configureSearchIndex(hotMeshClient, searchOptions ?? this.search);
+  }
+
+  /**
+   * Lists all search indexes in the operational data layer when the
+   * targeted Redis backend supports the FT module.
+   * @returns {Promise<string[]>}
+   * @example
+   * // list all search indexes
+   * const indexes = await pluck.listSearchIndexes();
+   * 
+   * // returns ['greeting', 'user', 'order', 'product']
+   */
+  async listSearchIndexes(): Promise<string[]> {
+    const hotMeshClient = await this.getHotMesh();
+    return await Durable.Search.listSearchIndexes(hotMeshClient);
   }
 
   /**
