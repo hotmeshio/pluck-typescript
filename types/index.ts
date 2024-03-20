@@ -63,6 +63,14 @@ export type WorkflowContext = {
    */
   counter: number;
   /**
+   * number as string for the replay cursor
+   */
+  cursor: string;
+  /**
+   * the replay hash of name/value pairs representing prior executions
+   */
+  replay: StringStringType;
+  /**
    * the HotMesh App namespace. `durable` is the default.
    */
   namespace: string;
@@ -400,6 +408,14 @@ export type JobOutput = {
 export type RollCallOptions = {
   delay?: number;
   namespace?: string;
+};
+
+export type FindJobsOptions = {
+  match?: string; //Redis match for use with SCAN
+  namespace?: string;
+  limit?: number;
+  batch?: number;
+  cursor?: string;
 };
 
 export type ThrottleOptions = {

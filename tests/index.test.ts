@@ -402,6 +402,25 @@ describe('Pluck`', () => {
     });
   });
 
+  describe('findJobs', () => {
+    it('should find matching jobs using a wildcard (SCAN)', async () => {
+      const [cursor, jobs] = await pluck.findJobs({
+        match: 'greeting*'
+      });
+      expect(cursor).toBe('0');
+      //2 jobs with 'greeting' prefix (these are greeting entities)
+      //this allows jobs to be cursored/paginated when FT not installed
+      expect(jobs.length).toBe(2);
+      expect(jobs[0].startsWith('hmsh:durable:j:greeting-')).toBeTruthy();
+    });
+
+    it('should find all jobs without a wildcard', async () => {
+      const [_cursor, jobs] = await pluck.findJobs();
+      expect(jobs.length).toBeGreaterThan(5);
+    });
+
+  });
+
   describe('search', () => {
     it('should create a search index', async () => {
       await pluck.createSearchIndex(

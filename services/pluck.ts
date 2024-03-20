@@ -21,7 +21,8 @@ import {
   StringAnyType,
   StringStringType,
   WorkflowSearchOptions, 
-  ThrottleOptions} from '../types';
+  ThrottleOptions,
+  FindJobsOptions} from '../types';
 import { RedisClass, RedisOptions } from '../types/redis';
 
 /**
@@ -216,7 +217,7 @@ class Pluck {
     // Process each item to convert into a hash object
     for (let i = 0; i < max * 2; i += 2) {
       const fields = rest[i + 1] as string[];
-      const hash: StringStringType = {};
+      const hash: StringStringType = { '$': rest[i] as string };
       for (let j = 0; j < fields.length; j += 2) {
         const fieldKey = fields[j].replace(/^_/, '');
         const fieldValue = fields[j + 1];
@@ -889,6 +890,25 @@ class Pluck {
   }
 
   /**
+   * For those Redis implementations without the FT module, this quasi-equivalent
+   * method is provided that uses SCAN along with a custom match
+   * string to view jobs. A cursor is likewise provided for rudimentary
+   * forward-pagination.
+   * @param {FindJobsOptions} [options]
+   * @returns {Promise<[string, string[]]>}
+   */
+  async findJobs(options: FindJobsOptions = {}): Promise<[string, string[]]> {
+    const hotMesh = await this.getHotMesh(options.namespace);
+    const jobs = await hotMesh.engine.store.findJobs(
+      options.match,
+      options.limit,
+      options.batch,
+      //options.cursor, //todo: need to include cursor to support pagination
+    );
+    return ['0', jobs];
+  }
+
+  /**
    * Executes the redis FT search query; optionally specify other commands
    * @example '@_quantity:[89 89]'
    * @example '@_quantity:[89 89] @_name:"John"'
@@ -936,13 +956,18 @@ class Pluck {
       args.push('LIMIT', '0', '0');
     } else {
       //limit which hash fields to return
-      if (options.return?.length) {
-        args.push('RETURN');
-        args.push(options.return.length.toString());
-        options.return.forEach(returnField => {
+      args.push('RETURN');
+      args.push(((options.return?.length ?? 0) + 1).toString());
+      args.push('$');
+      options.return?.forEach(returnField => {
+        if (returnField.startsWith('"')) {
+          //request a literal hash value
+          args.push(returnField.slice(1, -1));
+        } else {
+          //request a search hash value
           args.push(`_${returnField}`);
-        });
-      }
+        }
+      });
       //paginate
       if (options.limit) {
         args.push('LIMIT', options.limit.start.toString(), options.limit.size.toString());
