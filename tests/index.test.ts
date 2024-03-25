@@ -124,7 +124,6 @@ describe('Pluck`', () => {
     const client = new Redis(options);
     await client.flushall();
     await client.quit();
-    await new Promise((resolve) => setTimeout(resolve, 2_500));
   }, 5_000);
 
   afterAll(async () => {
@@ -138,6 +137,16 @@ describe('Pluck`', () => {
 
   describe('connect', () => {
     it('should connect a function', async () => {
+      //should never be more than 5 published events matching 'greeting' entity
+      const max = 5;
+      let counter = 0;
+      await pluck.mesh.sub(async (topic, message) => {
+        if (message.entity === entityName) {
+          counter++;
+        }
+        expect(counter).toBeLessThanOrEqual(max);
+      });
+
       const worker = await pluck.connect<Promise<string>>({
         entity: entityName,
         target: greet,
@@ -149,6 +158,18 @@ describe('Pluck`', () => {
         target: sleeper,
       });
       expect(sleeperWorker).toBeDefined();
+
+      //send a rollcall message to the `greeting` worker;
+      //tell it to announce its full status every 2.5 sec;
+      //max out at 5 messages...no need to spam the
+      //network if no one cares;
+      pluck.mesh.pub({
+        type: 'rollcall',
+        topic: `${entityName}-${entityName}`, //target `greeting` entity
+        signature: true, //request the stringified target function
+        interval: 2.5, //send every 2.5 seconds
+        max, //max 5 published messages; THIS IS WHY 5 is the MAX!!!
+      });
     });
 
     it('should connect a function and isolate the namespace', async () => {

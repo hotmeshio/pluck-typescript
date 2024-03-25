@@ -410,6 +410,10 @@ export type RollCallOptions = {
   namespace?: string;
 };
 
+export type SubscriptionOptions = {
+  namespace?: string;
+};
+
 export type FindJobsOptions = {
   match?: string; //Redis match for use with SCAN
   namespace?: string;
@@ -449,7 +453,7 @@ export type FindWhereOptions = {
   options?: FindOptions;
   count?: boolean;
   /** if null or empty, all index results will be paginated/returned. */
-  query?: FindWhereQuery[];
+  query?: FindWhereQuery[] | string;
   return?: string[];
   limit?: {
       start: number;
@@ -489,3 +493,9 @@ export interface DurableJobExport {
   transitions: ExportTransitions;
   cycles: ExportCycles;
 };
+
+export interface QuorumMessageCallback {
+  (topic: string, message: QuorumMessage): void;
+}
+
+export type QuorumMessage = StringAnyType;

@@ -22,7 +22,10 @@ import {
   StringStringType,
   WorkflowSearchOptions, 
   ThrottleOptions,
-  FindJobsOptions} from '../types';
+  FindJobsOptions,
+  QuorumMessageCallback,
+  SubscriptionOptions,
+  QuorumMessage} from '../types';
 import { RedisClass, RedisOptions } from '../types/redis';
 
 /**
@@ -32,6 +35,8 @@ import { RedisClass, RedisOptions } from '../types/redis';
  * establishing an "Operational Data Layer" (ODL).
  */
 class Pluck {
+
+  connectionSignatures: StringStringType = {};
 
   /**
    * The Redis connection options. NOTE: Redis and IORedis
@@ -293,6 +298,65 @@ class Pluck {
   }
 
   /**
+   * Exposes the the service mesh control plane through the
+   * mesh 'events' (pub/sub) system. This is useful for
+   * monitoring and managing the operational data layer.
+   */
+  mesh = {
+    /**
+     * subscribes to the mesh control plane
+     * @param {QuorumMessageCallback} callback - the callback function
+     * @param {SubscriptionOptions} options - connection options
+     * @returns {Promise<void>}
+     */
+    sub: async (callback: QuorumMessageCallback, options: SubscriptionOptions = {}): Promise<void> => {
+      const hotMesh = await this.getHotMesh(options.namespace || 'durable');
+      const callbackWrapper: QuorumMessageCallback = (topic, message) => {
+        if (message.type === 'pong' && !message.originator) {
+          if (message.profile?.worker_topic) {
+            const [entity] = message.profile.worker_topic.split('-');
+            if (entity) {
+              message.profile.entity = message.entity = entity;
+              if (this.connectionSignatures[entity]) {
+                message.profile.signature = this.connectionSignatures[entity];
+              }
+            }
+          }
+        } else if (message?.topic) {
+          const [entity] = message.topic.split('-');
+          if (entity) {
+            message.entity = entity;
+          }
+        }
+        callback(topic, message);
+      }
+      await hotMesh.quorum.sub(callbackWrapper);
+    },
+
+    /**
+     * publishes a message to the mesh control plane
+     * @param {HotMeshTypes.QuorumMessage} message - the message payload
+     * @param {SubscriptionOptions} options - connection options
+     * @returns {Promise<void>}
+     */
+    pub: async (message: HotMeshTypes.QuorumMessage, options: SubscriptionOptions = {}): Promise<void> => {
+      const hotMesh = await this.getHotMesh(options.namespace || 'durable');
+      await hotMesh.quorum.pub(message as undefined as HotMeshTypes.QuorumMessage);
+    },
+
+    /**
+     * unsubscribes from the mesh control plane
+     * @param {QuorumMessageCallback} callback - the callback function
+     * @param {SubscriptionOptions} options - connection options
+     * @returns {Promise<void>}
+     */
+    unsub: async (callback: QuorumMessageCallback, options: SubscriptionOptions = {}): Promise<void> => {
+      const hotMesh = await this.getHotMesh(options.namespace || 'durable');
+      await hotMesh.quorum.unsub(callback);
+    }
+  }
+
+  /**
    * Connects a function to the operational data layer.
    * 
    * @template T The expected return type of the target function.
@@ -320,6 +384,7 @@ class Pluck {
   async connect<T>({ entity, target, options = {} }: ConnectionInput<T>): Promise<boolean> {
     this.validate(entity);
 
+    this.connectionSignatures[entity] = target.toString();
     const targetFunction = { [entity]: async (...args: any[]): Promise<T> => {
       const { callOptions } = this.bindCallOptions(args, options);
       const result = await target.apply(target, args) as T;
@@ -892,20 +957,24 @@ class Pluck {
   /**
    * For those Redis implementations without the FT module, this quasi-equivalent
    * method is provided that uses SCAN along with a custom match
-   * string to view jobs. A cursor is likewise provided for rudimentary
-   * forward-pagination.
+   * string to view jobs. A cursor is likewise provided in support
+   * of rudimentary pagination.
    * @param {FindJobsOptions} [options]
    * @returns {Promise<[string, string[]]>}
+   * @example
+   * // find jobs
+   * const [cursor, jobs] = await pluck.findJobs({ match: 'greeting*' });
+   * 
+   * // returns [ '0', [ 'hmsh:durable:j:greeting-jsmith123', 'hmsh:durable:j:greeting-jdoe456' ] ]
    */
   async findJobs(options: FindJobsOptions = {}): Promise<[string, string[]]> {
     const hotMesh = await this.getHotMesh(options.namespace);
-    const jobs = await hotMesh.engine.store.findJobs(
+    return await hotMesh.engine.store.findJobs(
       options.match,
       options.limit,
       options.batch,
-      //options.cursor, //todo: need to include cursor to support pagination
+      options.cursor,
     );
-    return ['0', jobs];
   }
 
   /**
@@ -916,7 +985,6 @@ class Pluck {
    * @param {FindOptions} options
    * @param {any[]} args
    * @returns {Promise<string[] | [number] | Array<number, string | number | string[]>>}
-   * @private
    */
   async find(entity: string, options: FindOptions, ...args: string[]): Promise<string[] | [number] | Array<string | number | string[]>> {    
     return await this.getClient().workflow.search(
@@ -988,13 +1056,13 @@ class Pluck {
 
   /**
    * Generates a search query from a FindWhereQuery array
-   * @param {FindWhereQuery[]} [query]
+   * @param {FindWhereQuery[] | string} [query]
    * @returns {string}
    * @private
    */
-  generateSearchQuery(query: FindWhereQuery[]): string {
+  generateSearchQuery(query: FindWhereQuery[] | string): string {
     if (!Array.isArray(query) || query.length === 0) {
-      return '*';
+      return typeof(query) === 'string' ? query as string : '*';
     }
     const my = this;
     let queryString = query.map(q => {
