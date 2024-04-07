@@ -257,7 +257,7 @@ describe('Pluck`', () => {
       const direct = await localGreet(email, name);
       const raw = await pluck.raw('greeting', 'jdoe');
       expect(raw._fred).toEqual('flintstone');
-      expect(raw.aBa).toEqual(`/s\"${direct}\"`);
+      expect(raw.aBa).toEqual(direct);
     });
 
     it('should only run proxy functions one time', async () => {

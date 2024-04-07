@@ -234,6 +234,33 @@ class Pluck {
   }
 
   /**
+   * serialize using the HotMesh `toString` format
+   * @private
+   */
+  toString(value: any): string|undefined {
+    switch (typeof value) {
+      case 'string':
+        break;
+      case 'boolean':
+        value = value ? '/t' : '/f';
+        break;
+      case 'number':
+        value = '/d' + value.toString();
+        break;
+      case 'undefined':
+        return undefined;
+      case 'object':
+        if (value === null) {
+          value = '/n';
+        } else {
+          value = '/s' + JSON.stringify(value);
+        }
+        break;
+    }
+    return value;
+  }
+
+  /**
    * returns an entity-namespaced guid
    * @param {string|null} entity - entity namespace
    * @param {string|null} [id] - workflow id (allowed to be namespaced)
@@ -455,7 +482,7 @@ class Pluck {
       const store = hotMesh.engine.store;
       const jobKey = store.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine.appId });
       //publish the 'done' payload
-      const jobResponse = ['aAa', '/t', 'aBa', `/s${JSON.stringify(result)}`];
+      const jobResponse = ['aAa', '/t', 'aBa', this.toString(result)];
       await store.exec('HSET', jobKey, ...jobResponse);
       await this.publishDone<T>(result, hotMesh, options);
       if (options.ttl === 'infinity') {
