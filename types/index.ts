@@ -415,10 +415,15 @@ export type SubscriptionOptions = {
 };
 
 export type FindJobsOptions = {
-  match?: string; //Redis match for use with SCAN
+  /** The workflow name; include an asterisk for wilcard search; refer to Redis SCAN for the allowed format */
+  match?: string;
+  /** application namespace; defaults to 'durable' */
   namespace?: string;
+  /** The suggested response limit. Reduce batch size to reduce the likelihood of large overages. */
   limit?: number;
+  /** How many records to scan at a time */
   batch?: number;
+  /** The start cursor; defaults to 0 */
   cursor?: string;
 };
 
