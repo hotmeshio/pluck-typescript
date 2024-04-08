@@ -326,17 +326,17 @@ The source files include a docker-compose that spins up one Redis instance and o
 Deploy the container:
 
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
 
-Run the tests (from within the container):
+Run the tests within the container:
 
 ```bash
-npm run test
+docker compose exec pluck npm run test
 ```
 
-Build from source (from within the container):
+Build from source within the container:
 
 ```bash
-npm run clean-build
+docker compose exec pluck npm run clean-build
 ```
