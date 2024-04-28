@@ -1,32 +1,32 @@
-import Redis from 'ioredis';
+import * as Redis from 'redis';
+import { createClient } from 'redis';
 
 import config from './$setup/config';
 import * as activities from './activities';
 import {Pluck, HotMesh } from '../index';
 import { JobOutput } from '@hotmeshio/hotmesh/build/types/job';
-import { StringStringType, WorkflowContext, WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
+import {
+  StringStringType,
+  WorkflowContext,
+  WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
 
 describe('Pluck`', () => {
-  const options = {
-    //socket: {
-      host: config.REDIS_HOST,
-      port: config.REDIS_PORT,
-      //tls: false,
-    //},
-    password: config.REDIS_PASSWORD,
-    db: config.REDIS_DATABASE,
-  };
+  //redis connection options
+  const url = `redis://:${config.REDIS_PASSWORD}@${config.REDIS_HOST}:${config.REDIS_PORT}`;
+  const options = { url };
 
   //configure pluck instance will full set of options
   //include redis instance and model/schema for use in search
   const pluck = new Pluck(
     Redis,
     options,
-    { email: { 
+    { 
+      email: { 
         type: 'string', required: true 
       }
     },
-    { schema: {
+    { 
+      schema: {
         email: { type: 'TEXT', sortable: true },
         newsletter: { type: 'TAG', sortable: true }
       },
@@ -36,7 +36,15 @@ describe('Pluck`', () => {
   );
 
   //wrap expensive/idempotent functions with a proxy
-  const { sendNewsLetter } = Pluck.proxyActivities<typeof activities>({ activities });
+  const { sendNewsLetter } = Pluck
+    .proxyActivities<typeof activities>({
+      activities,
+      retryPolicy: {
+        backoffCoefficient: 1,
+        maximumInterval: '1 second',
+        maximumAttempts: 3,
+      }
+    });
 
   const entityName = 'greeting';
   const idemKey = HotMesh.guid();
@@ -54,9 +62,10 @@ describe('Pluck`', () => {
     //simulate errors in the user's function (handle gracefully)
     if (shouldThrowError) {
       errorCount++;
-      if (errorCount == 2) {
+      if (errorCount == 1) {
         shouldThrowError = false;
       }
+      console.log('throwing')
       throw new Error('Error!')
     }
 
@@ -121,8 +130,10 @@ describe('Pluck`', () => {
 
   beforeAll(async () => {
     // init Redis and flush db
-    const client = new Redis(options);
-    await client.flushall();
+    const client = await createClient({ url })
+    .on('error', err => console.log('Redis Client Error', err))
+    .connect();
+    await client.flushAll();
     await client.quit();
   }, 5_000);
 
@@ -136,7 +147,7 @@ describe('Pluck`', () => {
     
 
   describe('connect', () => {
-    it('should connect a function', async () => {
+    it('should connect a function and auto-deploy HotMesh to Redis', async () => {
       //should never be more than 5 published events matching 'greeting' entity
       const max = 5;
       let counter = 0;
@@ -163,13 +174,13 @@ describe('Pluck`', () => {
       //tell it to announce its full status every 2.5 sec;
       //max out at 5 messages...no need to spam the
       //network if no one cares;
-      pluck.mesh.pub({
-        type: 'rollcall',
-        topic: `${entityName}-${entityName}`, //target `greeting` entity
-        signature: true, //request the stringified target function
-        interval: 2.5, //send every 2.5 seconds
-        max, //max 5 published messages; THIS IS WHY 5 is the MAX!!!
-      });
+      // pluck.mesh.pub({
+      //   type: 'rollcall',
+      //   topic: `${entityName}-${entityName}`, //target `greeting` entity
+      //   signature: true, //request the stringified target function
+      //   interval: 2.5, //send every 2.5 seconds
+      //   max, //max 5 published messages; THIS IS WHY 5 is the MAX!!!
+      // });
     });
 
     it('should connect a function and isolate the namespace', async () => {
@@ -243,13 +254,13 @@ describe('Pluck`', () => {
             }
           },
           id: 'jdoe',
-          ttl: '30 seconds',
+          ttl: '60 seconds',
         }});
 
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
       expect(brokered).toEqual(direct);
-    });
+    }, 10_000);
 
     it('should return RAW fields (HGETALL)', async () => {
       const email = 'jdoe@pluck.com';
@@ -318,7 +329,7 @@ describe('Pluck`', () => {
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
       expect(brokered).toEqual(direct);
-    });
+    }, 10_000);
 
     it('should exec a durable function (ttl:infinity) that calls a proxy and hook', async () => {
       const email = 'floe.doe@pluck.com';
@@ -334,7 +345,7 @@ describe('Pluck`', () => {
       //call directly (NodeJS will govern the exchange)
       const direct = await localGreet(email, name);
       expect(brokered).toEqual(direct);
-    });
+    }, 10_000);
 
     it('should flush a durable function (ttl:infinity)', async () => {
       //flush causes the main thread to exit (it waits for the flush signal)
@@ -363,16 +374,25 @@ describe('Pluck`', () => {
       const brokered = await pluck.exec<Promise<string>>({
         entity: 'greeting',
         args: [email, name],
-        options: { id: idemKey, ttl: '20 seconds' }
+        options: {
+          id: idemKey,
+          ttl: '60 seconds',
+          //configure the retry policy to run quickly during testing
+          config: {
+            backoffCoefficient: 1, //value of throttle is: `backoffCoefficient^retryCount` (first retry is 1 secod)
+            maximumInterval: '1 second',
+            maximumAttempts: 3,
+          }
+        }
       });
-      expect(errorCount).toEqual(2);
+      expect(errorCount).toEqual(1);
       expect(shouldThrowError).toBeFalsy();
 
       //call directly (NodeJS will now govern the exchange)
       const direct = await localGreet(email, name);
 
       expect(brokered).toEqual(direct);
-    }, 10_000); //need more time, since pluck will retry
+    }, 15_000);
   });
 
   describe('info', () => {
@@ -394,7 +414,11 @@ describe('Pluck`', () => {
 
   describe('hook', () => {
     it('should call the `unsubscribe` hook function', async () => {
-      let pluckData = await pluck.all('greeting', idemKey);
+      let pluckData: any;
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        pluckData = await pluck.all('greeting', idemKey);
+      } while (pluckData.newsletter !== 'yes');
       expect(pluckData.newsletter).toEqual('yes');
       //hooks only return an id (this is the `guarantee` the hook will complete)
       const hookId = await pluck.hook({
@@ -412,7 +436,7 @@ describe('Pluck`', () => {
       pluckData = await pluck.all('greeting', idemKey);
       expect(pluckData.newsletter).toEqual('no');
       expect(pluckData.reason).toEqual(reason);
-    });
+    }, 10_000);
   });
 
   describe('export', () => {

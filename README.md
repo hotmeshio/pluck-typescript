@@ -37,15 +37,15 @@ Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational 
 
 ## Design
 ### Connect Your Functions
-Easily expose your target functions. For example, register the legacy `getUser` function as the `user` entity, exposing the function to any service connected to Redis.
+Easily expose your target functions. Here the legacy `getUser` function is registered as `user`.
 
 ```javascript
-import Redis from 'ioredis'; //OR `import * as Redis from 'redis';`
+import * as Redis from 'redis'; //or `import redis from 'ioredis'`
 import { Pluck } from '@hotmeshio/pluck'
 
-const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
+const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
 
-const getUser = (id: string) => {
+const getUser = async (id: string) => {
   //...fetch user from DB: { id: 'jsmith123', name: 'Jan Smith', ... }
   return user;
 }
@@ -60,10 +60,10 @@ pluck.connect({
 Call connected functions from anywhere on the network with a connection to Redis.
 
 ```javascript
-import Redis from 'ioredis';
+import * as Redis from 'redis';
 import { Pluck } from '@hotmeshio/pluck'
 
-const pluck = new Pluck(Redis, { host: 'localhost', port: 6379 });
+const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
 
 const response = await pluck.exec({
   entity: 'user',
@@ -110,7 +110,7 @@ const response = await pluck.flush( 'user', 'jsmith123');
 ### Hooks
 Operationalized functions are "active" and can be extended using Hooks. Hooks are *subordinated-workflows* that run transactionally, with read/write access to the main function's state.
 
-Consider the `user.bill` hook which sends *recurring* bills according to a user's chosen plan. It showcases a few of Pluck's workflow extension methods, including `search.get`, `search.set`, `getContext`, `sleepFor`, and `executeChild`. *Effortlessly create recurring, transactional workflows without reliance on external schedulers.*
+Consider the `user.bill` hook which sends *recurring* bills according to a user's chosen plan. It showcases a few of Pluck's workflow extension methods, including `search.get`, `search.set`, `getContext`, `sleepFor`, and `execChild`. *Effortlessly create recurring, transactional workflows without reliance on external schedulers.*
 
 ```javascript
 //connect the `user.bill` hook function
@@ -130,7 +130,7 @@ pluck.connect({
 
     do {
       //call the `bill` workflow function
-      await Pluck.workflow.executeChild({
+      await Pluck.workflow.execChild({
         entity: 'bill',
         args: [{ userId, planId, plan, cycle }]
       });
@@ -159,7 +159,7 @@ await pluck.hook({
 ```
 
 ### Composition
-The `user.bill` *hook* calls `executeChild` each time it awakens, invoking the `bill` workflow. This is an example of *composition* in Pluck, where a parent workflow spawns a child workflow using the `startChild` or `executeChild` workflow extension methods. The `bill` workflow sends the user an invoice. If something goes wrong (for example, if the `sendInvoice` function call fails), Pluck will retry using an exponential backoff strategy until it succeeds.
+The `user.bill` *hook* calls `execChild` each time it awakens, invoking the `bill` workflow. This is an example of *composition* in Pluck, where a parent workflow spawns a child workflow using the `startChild` or `execChild` workflow extension methods. The `bill` workflow sends the user an invoice. If something goes wrong (for example, if the `sendInvoice` function call fails), Pluck will retry using an exponential backoff strategy until it succeeds.
 
 ```javascript
 //connect the `bill` workflow function
@@ -187,17 +187,22 @@ pluck.connect({
 >💡If you're familiar with durable workflow engines like Temporal, you'll recognize the need to wrap activity calls, so they run exactly *once*. Pluck provides a few options, including `proxyActivities` and `once`. Assume for this example that that there is a legacy `sendInvoice` method that has been wrapped using `once` to ensure the user is never double-billed.
 
 ### Enhancing Functionality with Workflow Extensions
-Workflow extension methods (like `sleepFor`, `search`, `executeChild`, and `once`) are available to your operationalized functions. They provide a rich set of tools for managing workflow state and orchestrating complex, multi-process solutions.
+Workflow extension methods (like `sleepFor`, `search`, `execChild`, and `once`) are available to your operationalized functions. They provide a rich set of tools for managing workflow state and orchestrating complex, multi-process solutions.
 
- - `waitForSignal` Pause your function and wait for external event(s) before continuing. The *waitForSignal* method will collate and cache the signals and only awaken your function once all signals have arrived.
-   ```javascript
-    const signals = [a, b] = await Pluck.workflow.waitForSignal('sig1', 'sig2')` 
+ - `waitFor` Pause your function using your chosen signal key, and only awaken when the signal is received from the outide. Use a standard `Promise` to collate and cache the signals and only awaken your function once all signals have arrived.
+    ```javascript
+    const { waitFor } = Pluck.workflow;
+
+    const [signal1, signal2] = await Promise.all([
+      waitFor<{payload: string}>('sig1'),
+      waitFor<number>('sig2')
+    ]);
     ```
  - `signal` Send a signal (and optional payload) to a paused function awaiting the signal.
     ```javascript
       await Pluck.workflow.signal('sig1', {payload: 'hi!'});
     ```
- - `hook` Redis governance converts your functions into 're-entrant processes'. Optionally use the *hook* method to spawn parallel execution threads to augment a running workflow.
+ - `hook` Redis governance converts your functions into 're-entrant processes'. Optionally use the *hook* method to spawn parallel execution threads to augment a running workflow. Hooks share the same memory (the same Redis record) as the main workflow, and can read/write to the same state.
     ```javascript
     await Pluck.workflow.hook({
       entity: 'user.bill.cancel',
@@ -216,9 +221,9 @@ Workflow extension methods (like `sleepFor`, `search`, `executeChild`, and `once
     ```javascript
     const result = await Pluck.workflow.once<string>(sendBill, billingInputs);
     ```
- - `executeChild` Call another durable function and await the response. *Compose sophisticated, multi-process solutions by calling child workflows.*
+ - `execChild` Call another durable function and await the response. *Compose sophisticated, multi-process solutions by calling child workflows.*
     ```javascript
-    const jobResponse = await Pluck.workflow.executeChild({
+    const jobResponse = await Pluck.workflow.execChild({
       entity: 'bill',
       args: [{ userId, planId, plan, cycle }],
     });
@@ -230,7 +235,7 @@ Workflow extension methods (like `sleepFor`, `search`, `executeChild`, and `once
       args: [{ userId, planId, plan, cycle }],
     });
     ```
- - `getContext` Get the current workflow context (e.g., `workflowId`, `namespace`, `topic`).
+ - `getContext` Get the current workflow context (e.g., `workflowId`, `namespace`, `topic`, `replay`).
     ```javascript
     const context = await Pluck.workflow.getContext();
     ```

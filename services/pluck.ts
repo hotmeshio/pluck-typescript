@@ -1,7 +1,6 @@
 import {
   Durable,
   HotMesh,
-  MeshOS,
   Types as HotMeshTypes } from '@hotmeshio/hotmesh';
 import {
   CallOptions,
@@ -55,15 +54,7 @@ class Pluck {
    * // Instantiate Pluck with 'redis' configuration
    * import * as Redis from 'redis';
    *
-   * const pluck = new Pluck(Redis, {
-   *  socket: {
-   *   host: 'localhost',
-   *   port: 6379,
-   *   tls: false,
-   *  },
-   *  password: 'shhh123',
-   *  database: 0,
-   * };
+   * const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
    */
   redisOptions: RedisOptions;
 
@@ -92,21 +83,19 @@ class Pluck {
   search: WorkflowSearchOptions;
 
   /**
-   * Provides a set of static extensions that can be included in
-   * any functon that is connected to the operational data layer
-   * (ODL) using `Pluck.connect`.
+   * Provides a set of static extensions that can be invoked by
+   * any function connected to the operational data layer (ODL).
    * @example
-   * // A durable function using various Pluck.workflow methods
+
    * function greet (email: string, user: { first: string}) {
    *   //persist the user's email and newsletter preferences
    *   const search = await Pluck.workflow.search();
    *   await search.set('email', email, 'newsletter', 'yes');
-
-   *   //call a 'hook' (it runs parallel to the main workflow and shares state)
+   *
+   *   //hook a function to send a newsletter
    *   await Pluck.workflow.hook({
-   *     workflowName: 'newsletter.subscribe',
-   *     taskQueue: 'newsletter.subscribe',
-   *     args: []
+   *     entity: 'user.newsletter',
+   *     args: [email]
    *   });
    *
    *   return `Hello, ${user.first}. Your email is [${email}].`;
@@ -117,8 +106,10 @@ class Pluck {
     sleepFor: Durable.workflow.sleepFor,
     signal: Durable.workflow.signal,
     hook: Durable.workflow.hook,
-    executeChild: Durable.workflow.executeChild,
-    waitForSignal: Durable.workflow.waitForSignal,
+    executeChild: Durable.workflow.execChild,
+    execChild: Durable.workflow.execChild,
+    waitForSignal: Durable.workflow.waitFor,
+    waitFor: Durable.workflow.waitFor,
     startChild: Durable.workflow.startChild,
     getHotMesh: Durable.workflow.getHotMesh,
     random: Durable.workflow.random,
@@ -155,15 +146,7 @@ class Pluck {
    * // Instantiate Pluck with 'redis' configuration
    * import * as Redis from 'redis';
    * 
-   * const pluck = new Pluck(Redis, {
-   *  socket: {
-   *   host: 'localhost',
-   *   port: 6379,
-   *   tls: false,
-   *  },
-   *  password: 'shhh123',
-   *  database: 0,
-   * };
+   * const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
    */
   constructor(redisClass: RedisClass, redisOptions: RedisOptions, model?: Model, search?: WorkflowSearchOptions) {
     this.redisClass = redisClass
@@ -487,7 +470,7 @@ class Pluck {
       await this.publishDone<T>(result, hotMesh, options);
       if (options.ttl === 'infinity') {
         //job will only exit upon receiving a flush signal
-        await Pluck.workflow.waitForSignal([`flush-${options.$guid}`])
+        await Pluck.workflow.waitFor(`flush-${options.$guid}`)
       } else {
         //pluck will exit after sleeping for 'ttl'
         await Pluck.workflow.sleepFor(options.ttl);
@@ -1169,5 +1152,5 @@ class Pluck {
   }
 };
 
-export { Pluck, Durable, HotMesh, MeshOS, HotMeshTypes };
+export { Pluck, Durable, HotMesh, HotMeshTypes };
 export * as Types from '../types';
