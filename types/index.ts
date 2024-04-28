@@ -259,16 +259,46 @@ export type HookOptions = {
   config?: WorkflowConfig;
 };
 
+/** 
+ * Options for sending signals in a workflow.
+ */
 export type SignalOptions = {
+  /** Task queue associated with the workflow */
   taskQueue: string;
-  data: Record<string, any>;
-  workflowId: string;
-  workflowName?: string;
-};
 
-export type WorkflowConfig = {
-  initialInterval?: string;
-};
+  /** Input data for the signal (any serializable object) */
+  data: Record<string, any>;
+
+  /** Execution ID, also known as the job ID */
+  workflowId: string;
+    
+  /** Optional name of the user's workflow function */
+  workflowName?: string;
+}
+
+/**
+ * Type definition for workflow configuration.
+ */
+type WorkflowConfig = {
+  /** 
+   * Backoff coefficient for retry mechanism.
+   * @default 10 (HMSH_DURABLE_EXP_BACKOFF)
+   */
+  backoffCoefficient?: number;
+
+  /** 
+   * Maximum number of attempts for retries.
+   * @default 5 (HMSH_DURABLE_MAX_ATTEMPTS)
+   */
+  maximumAttempts?: number;
+
+  /** 
+   * Maximum interval between retries.
+   * @default 120s (HMSH_DURABLE_MAX_INTERVAL)
+   */
+  maximumInterval?: string;
+}
+
 
 export type CallOptions = {
   /**
@@ -336,70 +366,115 @@ export type ActivityData = {
 };
 
 export type JobMetadata = {
-    key?: string;
-    jid: string;
-    gid: string;
-    dad: string;
-    aid: string;
-    pj?: string;
-    pg?: string;
-    pd?: string;
-    pa?: string;
-    ngn?: string;
-    app: string;
-    vrs: string;
-    tpc: string;
-    ts: string;
-    jc: string;
-    ju: string;
-    js: JobStatus;
-    atp: string;
-    stp: string;
-    spn: string;
-    trc: string;
-    err?: string;
-    expire?: number;
-};
-
-export type JobInterruptOptions = {
-  /**
-   * Optional reason when throwing the error 
-   */
-  reason?: string;
-  /**
-   * default is `true` when `undefined` (throw JobInterrupted/410 error)
-   */
-  throw?: boolean;
-  /** 
-   * default behavior is `false` when `undefined` (do NOT interrupt child jobs)
-   */
-  descend?: boolean;
-  /**
-   * default is false; if true, errors related to inactivation (like overage...already inactive) are suppressed/ignored
-   */
-  suppress?: boolean;
-  /**
-   * how long to wait in seconds before fully expiring/removing the hash from Redis; 
-   * the job is inactive, but can remain in the cache indefinitely;
-   * minimum 1 second
-   */
+  /** job_key */
+  key?: string;
+  
+  /** system assigned guid that corresponds to the transition message guid that spawned reentry */
+  guid?: string;
+  
+  /** system assigned guid; ensured created/deleted/created jobs are unique */
+  gid: string;
+  
+  /** job_id (jid+dad+aid) is composite key for activity */
+  jid: string;
+  
+  /** dimensional address for the activity (,0,0,1) */
+  dad: string;
+  
+  /** activity_id as in the YAML file */
+  aid: string;
+  
+  /** parent_job_id (pj+pd+pa) is composite key for parent activity */
+  pj?: string;
+  
+  /** parent_generational_id (system assigned at trigger inception); pg is the parent job's gid (just in case user created/deleted/created a job with same jid) */
+  pg?: string;
+  
+  /** parent_dimensional_address */
+  pd?: string;
+  
+  /** parent_activity_id */
+  pa?: string;
+  
+  /** sever the dependency chain if true (startChild/vs/execChild) */
+  px?: boolean;
+  
+  /** engine guid (one time subscriptions) */
+  ngn?: string;
+  
+  /** app_id */
+  app: string;
+  
+  /** app version */
+  vrs: string;
+  
+  /** subscription topic */
+  tpc: string;
+  
+  /** 201203120005 (slice of time) //time series */
+  ts: string;
+  
+  /** GMT created //job_created */
+  jc: string;
+  
+  /** GMT updated //job_updated */
+  ju: string;
+  
+  js: JobStatus;
+  
+  /** activity_type */
+  atp: string;
+  
+  /** activity_subtype */
+  stp: string;
+  
+  /** open telemetry span context */
+  spn: string;
+  
+  /** open telemetry trace context */
+  trc: string;
+  
+  /** stringified job error json: {message: string, code: number, error?} */
+  err?: string;
+  
+  /** process data expire policy */
   expire?: number;
 };
 
-
+/**
+ * job_status semaphore
+ */
 export type JobStatus = number;
 
 export type JobState = {
-    metadata: JobMetadata;
-    data: JobData;
-    [activityId: symbol]: {
-        input: ActivityData;
-        output: ActivityData;
-        hook: ActivityData;
-        settings: ActivityData;
-        errors: ActivityData;
-    };
+  metadata: JobMetadata;
+  data: JobData;
+  [activityId: symbol]: {
+    input: ActivityData;
+    output: ActivityData;
+    hook: ActivityData;
+    settings: ActivityData;
+    errors: ActivityData;
+  };
 };
+
+export type JobInterruptOptions = {
+  /** Optional reason when throwing the error  */
+  reason?: string;
+
+  /** default is `true` when `undefined` (throw JobInterrupted/410 error) */
+  throw?: boolean;
+
+  /** default behavior is `false` when `undefined` (do NOT interrupt child jobs) */
+  descend?: boolean;
+
+  /** default is false; if true, errors related to inactivation (like overage...already inactive) are suppressed/ignored */
+  suppress?: boolean;
+
+  /** how long to wait in seconds before fully expiring/removing the hash from Redis; the job is inactive, but can remain in the cache indefinitely. minimum 1 second.*/
+  expire?: number;
+};
+
 export type JobOutput = {
     metadata: JobMetadata;
     data: JobData;
@@ -417,12 +492,16 @@ export type SubscriptionOptions = {
 export type FindJobsOptions = {
   /** The workflow name; include an asterisk for wilcard search; refer to Redis SCAN for the allowed format */
   match?: string;
+
   /** application namespace; defaults to 'durable' */
   namespace?: string;
+
   /** The suggested response limit. Reduce batch size to reduce the likelihood of large overages. */
   limit?: number;
+
   /** How many records to scan at a time */
   batch?: number;
+
   /** The start cursor; defaults to 0 */
   cursor?: string;
 };
@@ -489,14 +568,41 @@ export interface ExportCycles {
   [key: string]: string[];
 }
 
+
+export type IdemParts = {
+  index: number;
+  secondary?: number;
+  dimension?: string;
+};
+
+export type IdemType = {
+  key: string;
+  value: string;
+  parts: IdemParts;
+};
+
+export interface TimelineEntry {
+  activity: string;
+  dimensions: string;
+  created: string;
+  updated: string;
+}
+
+export interface TimestampParts {
+  activity: string;
+  dimensions: string;
+  created: string;
+  updated: string;
+}
+
 export interface DurableJobExport {
   data: StringAnyType;
-  dependencies: DependencyExport[];
+  dependencies?: Record<string, any>[];
   state: StringAnyType;
   status: string;
-  timeline: JobTimeline[];
-  transitions: ExportTransitions;
-  cycles: ExportCycles;
+  timeline?: JobTimeline[];
+  idempotents: IdemType[];
+  replay: TimestampParts[];
 };
 
 export interface QuorumMessageCallback {
