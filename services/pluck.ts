@@ -6,14 +6,12 @@ import {
   CallOptions,
   ConnectionInput,
   ConnectOptions,
-  DurableJobExport,
   ExecInput,
   FindWhereOptions,
   FindOptions,
   FindWhereQuery,
   HookInput,
   JobInterruptOptions,
-  JobOutput,
   Model,
   RollCallOptions,
   SearchResults,
@@ -693,8 +691,11 @@ class Pluck {
       return await handle.result() as unknown as T;
     } catch (e) {
       //create, since not found; then await the result
+      const optionsClone = { ...options };
+      delete optionsClone.search;
+      delete optionsClone.config;
       const handle = await client.workflow.start({
-        args: [...args, {...options, $guid: workflowId, $type: 'exec' }],
+        args: [...args, {...optionsClone, $guid: workflowId, $type: 'exec' }],
         taskQueue: options.taskQueue ?? entity,
         workflowName: entity,
         workflowId: options.workflowId ?? workflowId,
@@ -748,7 +749,7 @@ class Pluck {
    *   }
    * }
    */
-  async info(entity: string, id: string, options: CallOptions = {}): Promise<JobOutput> {
+  async info(entity: string, id: string, options: CallOptions = {}): Promise<HotMeshTypes.JobOutput> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
@@ -769,10 +770,10 @@ class Pluck {
    * // Export a function
    * await pluck.export('greeting', 'jsmith123');
    */
-  async export(entity: string, id: string): Promise<DurableJobExport> {
+  async export(entity: string, id: string, options?: HotMeshTypes.ExportOptions): Promise<HotMeshTypes.DurableJobExport> {
     const workflowId = Pluck.mintGuid(entity, id);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    return await handle.export();
+    return await handle.export(options);
   }
 
   /**

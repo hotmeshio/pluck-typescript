@@ -65,7 +65,6 @@ describe('Pluck`', () => {
       if (errorCount == 1) {
         shouldThrowError = false;
       }
-      console.log('throwing')
       throw new Error('Error!')
     }
 
@@ -441,9 +440,11 @@ describe('Pluck`', () => {
 
   describe('export', () => {
     it('should export the job timelines, actions, and dependencies', async () => {
-      const exported = await pluck.export('greeting', idemKey);
-      //console.log(JSON.stringify(exported, null, 2));
-      expect(exported.state.data.response).toEqual('Hello, Jim Doe. Your email is [jim.doe@pluck.com].');
+      let exported = await pluck.export('greeting', idemKey);
+      expect(exported.state?.data.response).toEqual('Hello, Jim Doe. Your email is [jim.doe@pluck.com].');
+      exported = await pluck.export('greeting', idemKey, { block: ['transitions'], values: false});
+      expect(exported.transitions).toBeUndefined();
+      expect(exported.timeline).toBeDefined();
     });
   });
 
