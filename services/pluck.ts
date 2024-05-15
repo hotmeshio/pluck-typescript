@@ -129,7 +129,9 @@ class Pluck {
   constructor(redisClass: Partial<HotMeshTypes.RedisClass>, redisOptions: Partial<HotMeshTypes.RedisOptions>, search?: HotMeshTypes.WorkflowSearchOptions) {
     this.redisClass = redisClass as HotMeshTypes.RedisClass;
     this.redisOptions = redisOptions as HotMeshTypes.RedisOptions;
-    this.search = search;
+    if (search) {
+      this.search = search;
+    }
   }
 
   /**
@@ -223,11 +225,11 @@ class Pluck {
   /**
    * returns an entity-namespaced guid
    * @param {string|null} entity - entity namespace
-   * @param {string|null} [id] - workflow id (allowed to be namespaced)
+   * @param {string} [id] - workflow id (allowed to be namespaced)
    * @returns {string}
    * @private
    */
-  static mintGuid(entity: string, id: string): string {
+  static mintGuid(entity: string, id?: string): string {
     if (!id && !entity) {
       throw "Invalid arguments [entity and id are both null]";
     } else if (!id) {
@@ -280,8 +282,8 @@ class Pluck {
    */
   async mintKey(entity: string, workflowId: string): Promise<string> {
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    const store = handle.hotMesh.engine.store;
-    return store.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: workflowId, appId: handle.hotMesh.engine.appId });
+    const store = handle.hotMesh.engine?.store;
+    return store?.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: workflowId, appId: handle.hotMesh.engine?.appId }) as string;
   }
 
   /**
@@ -317,7 +319,7 @@ class Pluck {
         }
         callback(topic, message);
       }
-      await hotMesh.quorum.sub(callbackWrapper);
+      await hotMesh.quorum?.sub(callbackWrapper);
     },
 
     /**
@@ -328,7 +330,7 @@ class Pluck {
      */
     pub: async (message: HotMeshTypes.QuorumMessage, options: HotMeshTypes.SubscriptionOptions = {}): Promise<void> => {
       const hotMesh = await this.getHotMesh(options.namespace || 'durable');
-      await hotMesh.quorum.pub(message as undefined as HotMeshTypes.QuorumMessage);
+      await hotMesh.quorum?.pub(message);
     },
 
     /**
@@ -339,7 +341,7 @@ class Pluck {
      */
     unsub: async (callback: HotMeshTypes.QuorumMessageCallback, options: HotMeshTypes.SubscriptionOptions = {}): Promise<void> => {
       const hotMesh = await this.getHotMesh(options.namespace || 'durable');
-      await hotMesh.quorum.unsub(callback);
+      await hotMesh.quorum?.unsub(callback);
     }
   }
 
@@ -439,11 +441,11 @@ class Pluck {
   async pauseForTTL<T>(result: T, options: CallOptions) {
     if (options?.ttl && options.$type === 'exec') {
       const hotMesh = await Pluck.workflow.getHotMesh();
-      const store = hotMesh.engine.store;
-      const jobKey = store.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine.appId });
+      const store = hotMesh.engine?.store;
+      const jobKey = store?.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine?.appId });
       //publish the 'done' payload
       const jobResponse = ['aAa', '/t', 'aBa', this.toString(result)];
-      await store.exec('HSET', jobKey, ...jobResponse);
+      await store?.exec('HSET', jobKey, ...jobResponse);
       await this.publishDone<T>(result, hotMesh, options);
       if (options.ttl === 'infinity') {
         //job will only exit upon receiving a flush signal
@@ -469,7 +471,7 @@ class Pluck {
    * @private
    */
   async publishDone<T>(result: T, hotMesh: HotMesh, options: CallOptions): Promise<void> {
-    await hotMesh.engine.store.publish(
+    await hotMesh.engine?.store?.publish(
       HotMeshTypes.KeyType.QUORUM,
       {
         type: 'job',
@@ -781,7 +783,7 @@ class Pluck {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
-    let prefixedFields = [];
+    let prefixedFields: string[] = [];
     if (Array.isArray(options.fields)) {
       prefixedFields = options.fields.map(field => `_${field}`);
     } else if (this.search?.schema) {
@@ -791,11 +793,11 @@ class Pluck {
     }
 
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    const store = handle.hotMesh.engine.store;
+    const store = handle.hotMesh.engine?.store;
     const jobKey = await this.mintKey(entity, workflowId);
-    const vals = await store.exec('HMGET', jobKey, ...prefixedFields);
+    const vals = await store?.exec('HMGET', jobKey, ...prefixedFields);
     const result = prefixedFields.reduce((obj, field: string, index) => {
-      obj[field.substring(1)] = vals[index];
+      obj[field.substring(1)] = vals?.[index];
       return obj;
     }, {} as { [key: string]: any });
 
@@ -858,9 +860,9 @@ class Pluck {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    const store = handle.hotMesh.engine.store;
+    const store = handle.hotMesh.engine?.store;
     const jobKey = await this.mintKey(entity, workflowId);
-    const rawResponse = await store.exec('HGETALL', jobKey);
+    const rawResponse = await store?.exec('HGETALL', jobKey) as string[];
     const responseObj = {};
     for (let i = 0; i < rawResponse.length; i += 2) {
       responseObj[rawResponse[i] as string] = rawResponse[i + 1];
@@ -887,13 +889,13 @@ class Pluck {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    const store = handle.hotMesh.engine.store;
+    const store = handle.hotMesh.engine?.store;
     const jobId = await this.mintKey(entity, workflowId);
     const safeArgs: string[] = [];
     for (let key in options.search?.data) {
       safeArgs.push(this.safeKey(key), options.search?.data[key].toString());
     }
-    return await store.exec('HSET', jobId, ...safeArgs) as unknown as number;
+    return await store?.exec('HSET', jobId, ...safeArgs) as unknown as number;
   }
 
   /**
@@ -913,9 +915,9 @@ class Pluck {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    const store = handle.hotMesh.engine.store;
+    const store = handle.hotMesh.engine?.store;
     const jobId = await this.mintKey(entity, workflowId);
-    const result = await store.exec('HINCRBYFLOAT', jobId, this.safeKey(field), amount.toString());
+    const result = await store?.exec('HINCRBYFLOAT', jobId, this.safeKey(field), amount.toString());
     return Number(result as string);
   }
 
@@ -938,9 +940,9 @@ class Pluck {
     }
     const prefixedFields = options.fields.map(field => `_${field}`);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
-    const store = handle.hotMesh.engine.store;
+    const store = handle.hotMesh.engine?.store;
     const jobKey = await this.mintKey(entity, workflowId);
-    const count = await store.exec('HDEL', jobKey, ...prefixedFields);
+    const count = await store?.exec('HDEL', jobKey, ...prefixedFields);
     return Number(count);
   }
 
@@ -959,12 +961,12 @@ class Pluck {
    */
   async findJobs(options: HotMeshTypes.FindJobsOptions = {}): Promise<[string, string[]]> {
     const hotMesh = await this.getHotMesh(options.namespace);
-    return await hotMesh.engine.store.findJobs(
+    return (await hotMesh.engine?.store?.findJobs(
       options.match,
       options.limit,
       options.batch,
       options.cursor,
-    );
+    ) as [string, string[]]);
   }
 
   /**
@@ -981,7 +983,7 @@ class Pluck {
       options.taskQueue ?? entity,
       options.workflowName ?? entity,
       options.namespace || 'durable',
-      options.index ?? options.search?.index ?? this.search.index,
+      options.index ?? options.search?.index ?? this.search.index ?? '',
       ...args,
     ); //[count, [id, fields[]], [id, fields[]], [id, fields[]], ...]]
   }
@@ -1058,7 +1060,7 @@ class Pluck {
     let queryString = query.map(q => {
       const { field, is, value, type } = q;
       const prefixedFieldName = my.search?.schema && field in my.search.schema ? `@_${field}` : `@${field}`;
-      const fieldType = my.search?.schema[field]?.type ?? type ?? 'TEXT';
+      const fieldType = my.search?.schema?.[field]?.type ?? type ?? 'TEXT';
 
       switch (fieldType) {
         case 'TAG':

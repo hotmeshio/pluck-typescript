@@ -40,7 +40,7 @@ Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational 
 Easily expose your target functions. Here the legacy `getUser` function is registered as `user`.
 
 ```javascript
-import * as Redis from 'redis'; //or `import redis from 'ioredis'`
+import * as Redis from 'redis'; //or `import Redis from 'ioredis'`
 import { Pluck } from '@hotmeshio/pluck'
 
 const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
