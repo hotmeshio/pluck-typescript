@@ -3,12 +3,7 @@ import { createClient } from 'redis';
 
 import config from './$setup/config';
 import * as activities from './activities';
-import {Pluck, HotMesh } from '../index';
-import { JobOutput } from '@hotmeshio/hotmesh/build/types/job';
-import {
-  StringStringType,
-  WorkflowContext,
-  WorkflowSearchOptions } from '@hotmeshio/hotmesh/build/types';
+import {Pluck, HotMesh, HotMeshTypes } from '../index';
 
 describe('Pluck`', () => {
   //redis connection options
@@ -21,18 +16,13 @@ describe('Pluck`', () => {
     Redis,
     options,
     { 
-      email: { 
-        type: 'string', required: true 
-      }
-    },
-    { 
       schema: {
         email: { type: 'TEXT', sortable: true },
         newsletter: { type: 'TAG', sortable: true }
       },
       index: 'greeting',
       prefix: ['greeting'],
-    } as WorkflowSearchOptions
+    } as HotMeshTypes.WorkflowSearchOptions
   );
 
   //wrap expensive/idempotent functions with a proxy
@@ -53,7 +43,7 @@ describe('Pluck`', () => {
   let callCount = 0;
   const reason = 'I am tired of newsletters';
 
-  const howdy = async (): Promise<WorkflowContext> => {
+  const howdy = async (): Promise<HotMeshTypes.WorkflowContext> => {
     return Pluck.workflow.getContext();
   }
 
@@ -183,7 +173,7 @@ describe('Pluck`', () => {
     });
 
     it('should connect a function and isolate the namespace', async () => {
-      const worker = await pluck.connect<Promise<WorkflowContext>>({
+      const worker = await pluck.connect<Promise<HotMeshTypes.WorkflowContext>>({
         entity: 'howdy',
         target: howdy,
         options: { namespace: 'staging' }
@@ -220,7 +210,7 @@ describe('Pluck`', () => {
 
   describe('exec', () => {
     it('should exec a function at a custom namespace', async () => {
-      const context = await pluck.exec<WorkflowContext>({
+      const context = await pluck.exec<HotMeshTypes.WorkflowContext>({
         entity: 'howdy',
         args: [],
         options: { namespace: 'staging' },
@@ -351,7 +341,7 @@ describe('Pluck`', () => {
       await pluck.flush('greeting', 'abc456');
       //sleep long enough for running hooks in the test to awaken from sleep
       await new Promise((resolve) => setTimeout(resolve, 1_000));
-      let pluckResponse: JobOutput;
+      let pluckResponse: HotMeshTypes.JobOutput;
       try {
         pluckResponse = await pluck.info('greeting', 'abc456');
       } catch (error) {
@@ -497,7 +487,7 @@ describe('Pluck`', () => {
             { field: 'newsletter', is: '=', value: 'no' }
           ],
           return: ['email', 'newsletter', 'reason']
-      }) as {count: number, data: StringStringType[]};
+      }) as {count: number, data: HotMeshTypes.StringStringType[]};
       //most recent result includes a reason
       //console.log('Indexed Search Results >', indexedResults);
       expect(indexedResults.data.length).toBeGreaterThan(0);
@@ -513,7 +503,7 @@ describe('Pluck`', () => {
           ],
           return: ['email', 'newsletter', 'reason'],
           limit: { start: 0, size: 1} // 0-based index (get first result)
-      }) as {count: number, data: StringStringType[]};
+      }) as {count: number, data: HotMeshTypes.StringStringType[]};
       //most recent result includes a reason
       expect(indexedResults.data.length).toBeGreaterThanOrEqual(1); //`max count` is 1 less than `return count`
       expect(indexedResults.data[indexedResults.data.length - 1].newsletter).toEqual('no');

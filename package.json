@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/pluck",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "description": "Operationalize Your Data",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -24,16 +24,19 @@
     "docs:create": "typedoc services/pluck.ts types/index.ts --name \"HotMesh Pluck\""
   },
   "keywords": [
-    "service mesh",
-    "durable workflow",
-    "redis",
-    "operational data",
-    "hotmesh"
+    "Service Mesh",
+    "Durable Workflow",
+    "Redis",
+    "Operational Data",
+    "HotMesh",
+    "HTAP",
+    "OLAP",
+    "OLTP"
   ],
   "author": "luke.birdeau@gmail.com",
   "license": "Apache-2.0",
   "dependencies": {
-    "@hotmeshio/hotmesh": "^0.0.55"
+    "@hotmeshio/hotmesh": "^0.0.56"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
@@ -41,7 +44,7 @@
     "@typescript-eslint/eslint-plugin": "^5.56.0",
     "@typescript-eslint/parser": "^5.56.0",
     "eslint": "^8.36.0",
-    "ioredis": "^5.4.1",
+    "ioredis": "^5.3.2",
     "jest": "^29.5.0",
     "redis": "^4.6.13",
     "rimraf": "^4.4.1",
@@ -50,5 +53,9 @@
     "ts-node-dev": "^2.0.0",
     "typedoc": "^0.25.7",
     "typescript": "^5.0.4"
+  },
+  "peerDependencies": {
+    "redis": "^4.0.0",
+    "ioredis": "^4.0.0 || ^5.0.0"
   }
 }

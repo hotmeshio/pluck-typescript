@@ -2,28 +2,13 @@ import {
   Durable,
   HotMesh,
   Types as HotMeshTypes } from '@hotmeshio/hotmesh';
+//pluck adds a few types in support of durable, long-running workflows
 import {
   CallOptions,
   ConnectionInput,
   ConnectOptions,
   ExecInput,
-  FindWhereOptions,
-  FindOptions,
-  FindWhereQuery,
-  HookInput,
-  JobInterruptOptions,
-  Model,
-  RollCallOptions,
-  SearchResults,
-  StringAnyType,
-  StringStringType,
-  WorkflowSearchOptions, 
-  ThrottleOptions,
-  FindJobsOptions,
-  QuorumMessageCallback,
-  SubscriptionOptions,
-  QuorumMessage} from '../types';
-import { RedisClass, RedisOptions } from '../types/redis';
+  HookInput } from '../types';
 
 /**
  * Pluck wraps the HotMesh `Durable` classes
@@ -33,7 +18,7 @@ import { RedisClass, RedisOptions } from '../types/redis';
  */
 class Pluck {
 
-  connectionSignatures: StringStringType = {};
+  connectionSignatures: HotMeshTypes.StringStringType = {};
 
   /**
    * The Redis connection options. NOTE: Redis and IORedis
@@ -54,7 +39,7 @@ class Pluck {
    *
    * const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
    */
-  redisOptions: RedisOptions;
+  redisOptions: HotMeshTypes.RedisOptions;
 
   /**
    * The Redis connection class.
@@ -63,12 +48,7 @@ class Pluck {
    * import Redis from 'ioredis';
    * import * as Redis from 'redis';
    */
-  redisClass: RedisClass;
-
-  /**
-   * Model declaration (all fields and types)
-   */
-  model: Model;
+  redisClass: HotMeshTypes.RedisClass;
 
   /**
    * Cached local instances (map) of HotMesh organized by namespace
@@ -78,7 +58,7 @@ class Pluck {
   /**
    * Redis FT search configuration (indexed/searchable fields and types)
    */
-  search: WorkflowSearchOptions;
+  search: HotMeshTypes.WorkflowSearchOptions;
 
   /**
    * Provides a set of static extensions that can be invoked by
@@ -118,7 +98,7 @@ class Pluck {
     /**
      * Interrupts a job by its entity and id.
      */
-    interrupt: async (entity: string, id: string, options: JobInterruptOptions = {}) => {
+    interrupt: async (entity: string, id: string, options: HotMeshTypes.JobInterruptOptions = {}) => {
       const jobId = Pluck.mintGuid(entity, id);
       await Durable.workflow.interrupt(jobId, options);
     }
@@ -146,10 +126,9 @@ class Pluck {
    * 
    * const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
    */
-  constructor(redisClass: RedisClass, redisOptions: RedisOptions, model?: Model, search?: WorkflowSearchOptions) {
-    this.redisClass = redisClass
-    this.redisOptions = redisOptions
-    this.model = model;
+  constructor(redisClass: Partial<HotMeshTypes.RedisClass>, redisOptions: Partial<HotMeshTypes.RedisOptions>, search?: HotMeshTypes.WorkflowSearchOptions) {
+    this.redisClass = redisClass as HotMeshTypes.RedisClass;
+    this.redisOptions = redisOptions as HotMeshTypes.RedisOptions;
     this.search = search;
   }
 
@@ -196,14 +175,14 @@ class Pluck {
   /**
    * @private
    */
-  arrayToHash(input: [number, ...Array<string | string[]>]): StringStringType[] {
+  arrayToHash(input: [number, ...Array<string | string[]>]): HotMeshTypes.StringStringType[] {
     const [_count, ...rest] = input;
     const max = rest.length / 2
-    const hashes: StringStringType[] = [];
+    const hashes: HotMeshTypes.StringStringType[] = [];
     // Process each item to convert into a hash object
     for (let i = 0; i < max * 2; i += 2) {
       const fields = rest[i + 1] as string[];
-      const hash: StringStringType = { '$': rest[i] as string };
+      const hash: HotMeshTypes.StringStringType = { '$': rest[i] as string };
       for (let j = 0; j < fields.length; j += 2) {
         const fieldKey = fields[j].replace(/^_/, '');
         const fieldValue = fields[j + 1];
@@ -317,9 +296,9 @@ class Pluck {
      * @param {SubscriptionOptions} options - connection options
      * @returns {Promise<void>}
      */
-    sub: async (callback: QuorumMessageCallback, options: SubscriptionOptions = {}): Promise<void> => {
+    sub: async (callback: HotMeshTypes.QuorumMessageCallback, options: HotMeshTypes.SubscriptionOptions = {}): Promise<void> => {
       const hotMesh = await this.getHotMesh(options.namespace || 'durable');
-      const callbackWrapper: QuorumMessageCallback = (topic, message) => {
+      const callbackWrapper: HotMeshTypes.QuorumMessageCallback = (topic, message) => {
         if (message.type === 'pong' && !message.originator) {
           if (message.profile?.worker_topic) {
             const [entity] = message.profile.worker_topic.split('-');
@@ -347,7 +326,7 @@ class Pluck {
      * @param {SubscriptionOptions} options - connection options
      * @returns {Promise<void>}
      */
-    pub: async (message: HotMeshTypes.QuorumMessage, options: SubscriptionOptions = {}): Promise<void> => {
+    pub: async (message: HotMeshTypes.QuorumMessage, options: HotMeshTypes.SubscriptionOptions = {}): Promise<void> => {
       const hotMesh = await this.getHotMesh(options.namespace || 'durable');
       await hotMesh.quorum.pub(message as undefined as HotMeshTypes.QuorumMessage);
     },
@@ -358,7 +337,7 @@ class Pluck {
      * @param {SubscriptionOptions} options - connection options
      * @returns {Promise<void>}
      */
-    unsub: async (callback: QuorumMessageCallback, options: SubscriptionOptions = {}): Promise<void> => {
+    unsub: async (callback: HotMeshTypes.QuorumMessageCallback, options: HotMeshTypes.SubscriptionOptions = {}): Promise<void> => {
       const hotMesh = await this.getHotMesh(options.namespace || 'durable');
       await hotMesh.quorum.unsub(callback);
     }
@@ -403,7 +382,7 @@ class Pluck {
 
     await Durable.Worker.create({
       namespace: options.namespace,
-      options: options.options ?? undefined,
+      options: options.options as HotMeshTypes.WorkerOptions,
       connection: await this.getConnection(),
       taskQueue: options.taskQueue ?? entity,
       workflow: targetFunction,
@@ -425,7 +404,7 @@ class Pluck {
    * @returns {StringAnyType}
    * @private
    */
-  bindCallOptions(args: any[], options: ConnectOptions, callOptions: CallOptions = {}): StringAnyType{
+  bindCallOptions(args: any[], options: ConnectOptions, callOptions: CallOptions = {}): HotMeshTypes.StringAnyType{
     if (args.length) {
       const lastArg = args[args.length - 1];
       if (lastArg instanceof Object && lastArg?.$type === 'exec') {
@@ -557,7 +536,7 @@ class Pluck {
    * // Interrupt a function
    * await pluck.interrupt('greeting', 'jsmith123');
    */
-  async interrupt(entity: string, id: string, options: JobInterruptOptions = {}): Promise<void> {
+  async interrupt(entity: string, id: string, options: HotMeshTypes.JobInterruptOptions = {}): Promise<void> {
     const workflowId = Pluck.mintGuid(entity, id);
     try {
       const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
@@ -583,7 +562,7 @@ class Pluck {
    * 
    * // returns '123456732345-0' (redis stream message receipt)
    */
-  async signal(guid: string, payload: StringAnyType): Promise<string> {
+  async signal(guid: string, payload: HotMeshTypes.StringAnyType): Promise<string> {
     return await this.getClient().workflow.signal(guid, payload);
   }
 
@@ -596,7 +575,7 @@ class Pluck {
    * @param {RollCallOptions} options 
    * @returns {Promise<HotMeshTypes.QuorumProfile[]>}
    */
-  async rollCall(options: RollCallOptions = {}): Promise<HotMeshTypes.QuorumProfile[]> {
+  async rollCall(options: HotMeshTypes.RollCallOptions = {}): Promise<HotMeshTypes.QuorumProfile[]> {
     return (await this.getHotMesh(options.namespace || 'durable')).rollCall(options.delay || 1000);
   }
 
@@ -613,7 +592,7 @@ class Pluck {
    * // Throttle a worker or engine
    * await pluck.throttle({ guid: '1234567890', throttle: 10_000 });
    */
-  async throttle(options: ThrottleOptions): Promise<boolean> {
+  async throttle(options: HotMeshTypes.ThrottleOptions): Promise<boolean> {
     return (await this.getHotMesh(options.namespace || 'durable')).throttle(options as HotMeshTypes.ThrottleOptions);
   }
 
@@ -798,15 +777,15 @@ class Pluck {
    * 
    * // returns { fred: 'flintstone', barney: 'rubble' }
    */
-  async get(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType>{
+  async get(entity: string, id: string, options: CallOptions = {}): Promise<HotMeshTypes.StringAnyType>{
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
     let prefixedFields = [];
     if (Array.isArray(options.fields)) {
       prefixedFields = options.fields.map(field => `_${field}`);
-    } else if (this.model) {
-      prefixedFields = Object.keys(this.model).map(field => `_${field}`);
+    } else if (this.search?.schema) {
+      prefixedFields = Object.keys(this.search.schema).map(field => `_${field}`);
     } else {
       return await this.all(entity, id, options);
     }
@@ -842,7 +821,7 @@ class Pluck {
    * 
    * // returns { fred: 'flintstone', barney: 'rubble', ...  }
    */
-  async all(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType> {
+  async all(entity: string, id: string, options: CallOptions = {}): Promise<HotMeshTypes.StringAnyType> {
     const rawResponse = await this.raw(entity, id, options);
     const responseObj = {};
     for (let key in rawResponse) {
@@ -875,7 +854,7 @@ class Pluck {
    * 
    * // returns { : '0', _barney: 'rubble', aBa: 'Hello, John Doe. Your email is [jsmith@pluck].', ... }
    */
-  async raw(entity: string, id: string, options: CallOptions = {}): Promise<StringAnyType> {
+  async raw(entity: string, id: string, options: CallOptions = {}): Promise<HotMeshTypes.StringAnyType> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
     const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
@@ -978,7 +957,7 @@ class Pluck {
    * 
    * // returns [ '0', [ 'hmsh:durable:j:greeting-jsmith123', 'hmsh:durable:j:greeting-jdoe456' ] ]
    */
-  async findJobs(options: FindJobsOptions = {}): Promise<[string, string[]]> {
+  async findJobs(options: HotMeshTypes.FindJobsOptions = {}): Promise<[string, string[]]> {
     const hotMesh = await this.getHotMesh(options.namespace);
     return await hotMesh.engine.store.findJobs(
       options.match,
@@ -997,7 +976,7 @@ class Pluck {
    * @param {any[]} args
    * @returns {Promise<string[] | [number] | Array<number, string | number | string[]>>}
    */
-  async find(entity: string, options: FindOptions, ...args: string[]): Promise<string[] | [number] | Array<string | number | string[]>> {    
+  async find(entity: string, options: HotMeshTypes.FindOptions, ...args: string[]): Promise<string[] | [number] | Array<string | number | string[]>> {    
     return await this.getClient().workflow.search(
       options.taskQueue ?? entity,
       options.workflowName ?? entity,
@@ -1029,7 +1008,7 @@ class Pluck {
    * 
    * // returns { count: 1, query: 'FT.SEARCH my-index @_name:"John" @_age:[2 +inf] @_quantity:[89 89] LIMIT 0 10', data: [ { name: 'John', quantity: '89' } ] }
    */
-  async findWhere(entity: string, options: FindWhereOptions): Promise<SearchResults | number> {
+  async findWhere(entity: string, options: HotMeshTypes.FindWhereOptions): Promise<HotMeshTypes.SearchResults | number> {
     const args: string[] = [this.generateSearchQuery(options.query)];
     if (options.count) {
       args.push('LIMIT', '0', '0');
@@ -1071,7 +1050,7 @@ class Pluck {
    * @returns {string}
    * @private
    */
-  generateSearchQuery(query: FindWhereQuery[] | string): string {
+  generateSearchQuery(query: HotMeshTypes.FindWhereQuery[] | string): string {
     if (!Array.isArray(query) || query.length === 0) {
       return typeof(query) === 'string' ? query as string : '*';
     }
@@ -1119,7 +1098,7 @@ class Pluck {
    * // creates a search index for the 'greeting' entity, using the default search options.
    * const index = await pluck.createSearchIndex('greeting');
    */
-  async createSearchIndex(entity: string, options: CallOptions = {}, searchOptions?: WorkflowSearchOptions): Promise<void> {
+  async createSearchIndex(entity: string, options: CallOptions = {}, searchOptions?: HotMeshTypes.WorkflowSearchOptions): Promise<void> {
     const workflowTopic = `${options.taskQueue ?? entity}-${entity}`;
     const hotMeshClient = await this.getClient().getHotMeshClient(workflowTopic);
     return await Durable.Search.configureSearchIndex(hotMeshClient, searchOptions ?? this.search);
