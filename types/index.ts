@@ -1,3 +1,46 @@
+import { Types as HotMeshTypes } from "@hotmeshio/hotmesh";
+
+export type CallOptions = {
+  /**
+   * if provided along with a `ttl`, the function will be cached
+   */
+  id?: string;
+  /**
+   * in format '1 minute', '5 minutes', '1 hour', 'infinity', etc
+   */
+  ttl?: string;
+  /**
+   * full GUID (including prefix)
+   */
+  $guid?: string;
+  /**
+   * exec, hook, proxy
+   */
+  $type?: string;
+  /**
+   * if set to false explicitly it will not await the result
+   */
+  await?: boolean;
+  /**
+   * taskQueue for the workflowId (defaults to entity)
+   */
+  taskQueue?: string;
+  /**
+   * defaults to `entity` input parameter; allows override of the workflowId prefix
+   */
+  prefix?: string;
+  search?: HotMeshTypes.WorkflowSearchOptions;
+  /**
+   * list of  state field names to return (this is NOT the final response)
+   */
+  fields?: string[];
+  /**
+   * namespace for the the execution client; how it appears in Redis (defaults to 'durable')
+   */
+  namespace?: string; //optional namespace for the workflowId (defaults to 'durable')
+  flush?: boolean;
+};
+
 export type ConnectOptions = {
   /**
    * if set to infinity, callers may not override (the function will be durable)
@@ -22,98 +65,8 @@ export type ConnectOptions = {
   /**
    * optional search configuration
    */
-  search?: WorkflowSearchOptions;
+  search?: HotMeshTypes.WorkflowSearchOptions;
 };
-
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-export type WorkerOptions = {
-  /**
-   * debug, info, warn, error
-   */
-  logLevel?: LogLevel;
-  /**
-   * 1-3 (10ms, 100ms, 1_000ms)
-   */
-  maxSystemRetries?: number;
-  /**
-   * 1-3 (10ms, 100ms, 1_000ms)
-   */
-  backoffCoefficient?: number; //2-10ish
-};
-
-export type SearchResults = {
-  /**
-   * the total number of results
-   */
-  count: number,
-  /**
-   * the raw FT.SEARCH query string
-   */
-  query: string,
-  /**
-   * the raw FT.SEARCH results as an array of objects
-   */
-  data: StringStringType[]
-};
-
-export type WorkflowContext = {
-  /**
-   * the reentrant semaphore, incremented in real-time as idempotent statements are re-traversed upon reentry. Indicates the current semaphore count.
-   */
-  counter: number;
-  /**
-   * number as string for the replay cursor
-   */
-  cursor: string;
-  /**
-   * the replay hash of name/value pairs representing prior executions
-   */
-  replay: StringStringType;
-  /**
-   * the HotMesh App namespace. `durable` is the default.
-   */
-  namespace: string;
-  /**
-   * the workflow/job ID
-   */
-  workflowId: string;
-  /**
-   * the dimensional isolation for the reentrant hook, expressed in the format `0,0`, `0,1`, etc
-   */
-  workflowDimension: string;
-  /**
-   * a concatenation of the task queue and workflow name (e.g., `${taskQueueName}-${workflowName}`)
-   */
-  workflowTopic: string;
-  /**
-   * the open telemetry trace context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
-   */
-  workflowTrace: string;
-  /**
-   * the open telemetry span context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
-   */
-  workflowSpan: string;
-};
-
-export type WorkflowSearchOptions = {
-  /**
-   * FT index name (myapp:myindex)
-   */
-  index?: string;
-  /**
-   * FT prefixes (['myapp:myindex:prefix1', 'myapp:myindex:prefix2'])
-   */
-  prefix?: string[];
-  /**
-   * FT field types (TEXT, NUMERIC, TAG)
-   */
-  schema?: Record<string, {type: 'TEXT' | 'NUMERIC' | 'TAG', sortable?: boolean}>;
-  /**
-   * data to seed the search space
-   */
-  data?: Record<string, string>;
-}
 
 /**
  * Connect a function to the operational data layer.
@@ -200,8 +153,9 @@ export type HookInput = {
    * Extended options for the hook function, like specifying a taskQueue
    * @example { taskQueue: 'priority' }
    */
-  options?: Partial<HookOptions>;
+  options?: Partial<HotMeshTypes.HookOptions>;
 };
+
 
 export type WorkflowOptions = {
   /**
@@ -239,374 +193,13 @@ export type WorkflowOptions = {
   /**
    * Search fields to seed function state when it first initializes
    */
-  search?: WorkflowSearchOptions;
+  search?: HotMeshTypes.WorkflowSearchOptions;
   /**
    * Extended execution options
    */
-  config?: WorkflowConfig;
+  config?: HotMeshTypes.WorkflowConfig;
   /**
    * Set to 'infinity' to make the function durable; otherwise, '1 minute', '1 hour', etc
    */
   ttl?: string;
 };
-
-export type HookOptions = {
-  namespace?: string;
-  taskQueue?: string;
-  entity?: string;
-  workflowId?: string;
-  workflowName?: string;
-  config?: WorkflowConfig;
-};
-
-/** 
- * Options for sending signals in a workflow.
- */
-export type SignalOptions = {
-  /** Task queue associated with the workflow */
-  taskQueue: string;
-
-  /** Input data for the signal (any serializable object) */
-  data: Record<string, any>;
-
-  /** Execution ID, also known as the job ID */
-  workflowId: string;
-    
-  /** Optional name of the user's workflow function */
-  workflowName?: string;
-}
-
-/**
- * Type definition for workflow configuration.
- */
-type WorkflowConfig = {
-  /** 
-   * Backoff coefficient for retry mechanism.
-   * @default 10 (HMSH_DURABLE_EXP_BACKOFF)
-   */
-  backoffCoefficient?: number;
-
-  /** 
-   * Maximum number of attempts for retries.
-   * @default 5 (HMSH_DURABLE_MAX_ATTEMPTS)
-   */
-  maximumAttempts?: number;
-
-  /** 
-   * Maximum interval between retries.
-   * @default 120s (HMSH_DURABLE_MAX_INTERVAL)
-   */
-  maximumInterval?: string;
-}
-
-
-export type CallOptions = {
-  /**
-   * if provided along with a `ttl`, the function will be cached
-   */
-  id?: string;
-  /**
-   * in format '1 minute', '5 minutes', '1 hour', 'infinity', etc
-   */
-  ttl?: string;
-  /**
-   * full GUID (including prefix)
-   */
-  $guid?: string;
-  /**
-   * exec, hook, proxy
-   */
-  $type?: string;
-  /**
-   * if set to false explicitly it will not await the result
-   */
-  await?: boolean;
-  /**
-   * taskQueue for the workflowId (defaults to entity)
-   */
-  taskQueue?: string;
-  /**
-   * defaults to `entity` input parameter; allows override of the workflowId prefix
-   */
-  prefix?: string;
-  search?: WorkflowSearchOptions;
-  /**
-   * list of  state field names to return (this is NOT the final response)
-   */
-  fields?: string[];
-  /**
-   * namespace for the the execution client; how it appears in Redis (defaults to 'durable')
-   */
-  namespace?: string; //optional namespace for the workflowId (defaults to 'durable')
-  flush?: boolean;
-};
-
-export type StringAnyType = {
-  [key: string]: any;
-};
-
-export type Model = {
-  [key: string]: {
-    type: 'string' | 'number' | 'boolean' | 'array' | 'object';
-    required?: boolean;
-    default?: any;
-    nullable?: boolean; //if true, the field can be set to null
-  };
-};
-
-export type StringStringType = {
-  [key: string]: string;
-};
-
-export type JobData = Record<string, unknown | Record<string, unknown>>;
-
-export type ActivityData = {
-    data: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-};
-
-export type JobMetadata = {
-  /** job_key */
-  key?: string;
-  
-  /** system assigned guid that corresponds to the transition message guid that spawned reentry */
-  guid?: string;
-  
-  /** system assigned guid; ensured created/deleted/created jobs are unique */
-  gid: string;
-  
-  /** job_id (jid+dad+aid) is composite key for activity */
-  jid: string;
-  
-  /** dimensional address for the activity (,0,0,1) */
-  dad: string;
-  
-  /** activity_id as in the YAML file */
-  aid: string;
-  
-  /** parent_job_id (pj+pd+pa) is composite key for parent activity */
-  pj?: string;
-  
-  /** parent_generational_id (system assigned at trigger inception); pg is the parent job's gid (just in case user created/deleted/created a job with same jid) */
-  pg?: string;
-  
-  /** parent_dimensional_address */
-  pd?: string;
-  
-  /** parent_activity_id */
-  pa?: string;
-  
-  /** sever the dependency chain if true (startChild/vs/execChild) */
-  px?: boolean;
-  
-  /** engine guid (one time subscriptions) */
-  ngn?: string;
-  
-  /** app_id */
-  app: string;
-  
-  /** app version */
-  vrs: string;
-  
-  /** subscription topic */
-  tpc: string;
-  
-  /** 201203120005 (slice of time) //time series */
-  ts: string;
-  
-  /** GMT created //job_created */
-  jc: string;
-  
-  /** GMT updated //job_updated */
-  ju: string;
-  
-  js: JobStatus;
-  
-  /** activity_type */
-  atp: string;
-  
-  /** activity_subtype */
-  stp: string;
-  
-  /** open telemetry span context */
-  spn: string;
-  
-  /** open telemetry trace context */
-  trc: string;
-  
-  /** stringified job error json: {message: string, code: number, error?} */
-  err?: string;
-  
-  /** process data expire policy */
-  expire?: number;
-};
-
-/**
- * job_status semaphore
- */
-export type JobStatus = number;
-
-export type JobState = {
-  metadata: JobMetadata;
-  data: JobData;
-  [activityId: symbol]: {
-    input: ActivityData;
-    output: ActivityData;
-    hook: ActivityData;
-    settings: ActivityData;
-    errors: ActivityData;
-  };
-};
-
-export type JobInterruptOptions = {
-  /** Optional reason when throwing the error  */
-  reason?: string;
-
-  /** default is `true` when `undefined` (throw JobInterrupted/410 error) */
-  throw?: boolean;
-
-  /** default behavior is `false` when `undefined` (do NOT interrupt child jobs) */
-  descend?: boolean;
-
-  /** default is false; if true, errors related to inactivation (like overage...already inactive) are suppressed/ignored */
-  suppress?: boolean;
-
-  /** how long to wait in seconds before fully expiring/removing the hash from Redis; the job is inactive, but can remain in the cache indefinitely. minimum 1 second.*/
-  expire?: number;
-};
-
-export type JobOutput = {
-    metadata: JobMetadata;
-    data: JobData;
-};
-
-export type RollCallOptions = {
-  delay?: number;
-  namespace?: string;
-};
-
-export type SubscriptionOptions = {
-  namespace?: string;
-};
-
-export type FindJobsOptions = {
-  /** The workflow name; include an asterisk for wilcard search; refer to Redis SCAN for the allowed format */
-  match?: string;
-
-  /** application namespace; defaults to 'durable' */
-  namespace?: string;
-
-  /** The suggested response limit. Reduce batch size to reduce the likelihood of large overages. */
-  limit?: number;
-
-  /** How many records to scan at a time */
-  batch?: number;
-
-  /** The start cursor; defaults to 0 */
-  cursor?: string;
-};
-
-export type ThrottleOptions = {
-  /** target an engine OR worker by GUID */
-  guid?: string;
-  /** target a worker quorum */
-  topic?: string;
-  /** in milliseconds; default is 0 */
-  throttle: number;
-  /** application namespace */
-  namespace?: string;
-};
-
-
-export type FindWhereQuery = {
-  field: string;
-  is: '=' | '==' | '>=' | '<=' | '[]';
-  value: string | boolean | number | [number, number];
-  type?: string;
-};
-
-export type FindOptions = {
-  workflowName?: string;
-  taskQueue?: string;
-  namespace?: string;
-  index?: string;
-  search?: WorkflowSearchOptions
-};
-
-export type FindWhereOptions = {
-  options?: FindOptions;
-  count?: boolean;
-  /** if null or empty, all index results will be paginated/returned. */
-  query?: FindWhereQuery[] | string;
-  return?: string[];
-  limit?: {
-      start: number;
-      size: number;
-  };
-};
-export interface ActivityAction {
-  action: string;
-  target: string;
-}
-export interface JobTimeline {
-  activity: string;
-  dimension: string;
-  duplex: 'entry' | 'exit';
-  timestamp: string;
-  actions?: ActivityAction[];
-}
-export interface DependencyExport {
-  type: string;
-  topic: string;
-  gid: string;
-  jid: string;
-}
-export interface ExportTransitions {
-  [key: string]: string[];
-}
-export interface ExportCycles {
-  [key: string]: string[];
-}
-
-
-export type IdemParts = {
-  index: number;
-  secondary?: number;
-  dimension?: string;
-};
-
-export type IdemType = {
-  key: string;
-  value: string;
-  parts: IdemParts;
-};
-
-export interface TimelineEntry {
-  activity: string;
-  dimensions: string;
-  created: string;
-  updated: string;
-}
-
-export interface TimestampParts {
-  activity: string;
-  dimensions: string;
-  created: string;
-  updated: string;
-}
-
-export interface DurableJobExport {
-  data: StringAnyType;
-  dependencies?: Record<string, any>[];
-  state: StringAnyType;
-  status: string;
-  timeline?: JobTimeline[];
-  idempotents: IdemType[];
-  replay: TimestampParts[];
-};
-
-export interface QuorumMessageCallback {
-  (topic: string, message: QuorumMessage): void;
-}
-
-export type QuorumMessage = StringAnyType;

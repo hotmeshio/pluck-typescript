@@ -2,6 +2,7 @@ node_modules/
 src/
 tests/
 docs/
+services/
 *.log
 *.test.ts
 .eslintignore
