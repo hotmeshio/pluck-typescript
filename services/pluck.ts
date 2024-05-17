@@ -507,15 +507,16 @@ class Pluck {
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - The workflow/job id
+   * @param {string} [namespace='durable'] - the namespace for the client
    * 
    * @example
    * // Flush a function
    * await pluck.flush('greeting', 'jsmith123');
    */
-  async flush(entity: string, id: string): Promise<string | void> {
+  async flush(entity: string, id: string, namespace?: string): Promise<string | void> {
     const workflowId = Pluck.mintGuid(entity, id);
     //resolve the system signal (this forces the main wrapper function to end)
-    await this.getClient().workflow.signal(`flush-${workflowId}`, {});
+    await this.getClient().workflow.signal(`flush-${workflowId}`, {}, namespace);
     await new Promise(resolve => setTimeout(resolve, 1000));
     //hooks may still be running; call `interrupt` to stop all threads
     await this.interrupt(entity, id, { descend: true, suppress: true, expire: 1 });
@@ -533,15 +534,16 @@ class Pluck {
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - The workflow/job id
    * @param {JobInterruptOptions} [options={}] - call options
+   * @param {string} [namespace='durable'] - the namespace for the client
    * 
    * @example
    * // Interrupt a function
    * await pluck.interrupt('greeting', 'jsmith123');
    */
-  async interrupt(entity: string, id: string, options: HotMeshTypes.JobInterruptOptions = {}): Promise<void> {
+  async interrupt(entity: string, id: string, options: HotMeshTypes.JobInterruptOptions = {}, namespace?: string): Promise<void> {
     const workflowId = Pluck.mintGuid(entity, id);
     try {
-      const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+      const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, namespace);
       const hotMesh = handle.hotMesh;
       await hotMesh.interrupt(`${hotMesh.appId}.execute`, workflowId, options);
     } catch(e) {
@@ -556,7 +558,7 @@ class Pluck {
    * 
    * @param {string} guid - The global identifier for the signal
    * @param {StringAnyType} payload - The payload to send with the signal
-   * 
+   * @param {string} [namespace='durable'] - the namespace for the client
    * @returns {Promise<string>} - the signal id
    * @example
    * // Signal a function with a payload
@@ -564,8 +566,8 @@ class Pluck {
    * 
    * // returns '123456732345-0' (redis stream message receipt)
    */
-  async signal(guid: string, payload: HotMeshTypes.StringAnyType): Promise<string> {
-    return await this.getClient().workflow.signal(guid, payload);
+  async signal(guid: string, payload: HotMeshTypes.StringAnyType, namespace?: string): Promise<string> {
+    return await this.getClient().workflow.signal(guid, payload, namespace);
   }
 
   /**

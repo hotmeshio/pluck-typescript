@@ -1,7 +1,7 @@
 # Pluck
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-Call any function from anywhere, reliably and durably. *Pluck unifies your most important functions into an Operational Data Layer.*
+Call any function from any service, reliably and durably. *Pluck unifies and shares your most important functions.*
 
 
 ## Install
@@ -13,7 +13,7 @@ npm install @hotmeshio/pluck
 ## Documentation and Key Features
 [SDK Documentation](https://hotmeshio.github.io/pluck-typescript/)
 
-Pluck is a TypeScript library designed to simplify the invocation and management of distributed functions across your cloud infrastructure. By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing critical business logic within a microservices architecture. Key features include:
+Pluck is a TypeScript library designed to simplify the invocation and management of distributed functions across your cloud infrastructure. By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing business logic at high speed within a microservices architecture. Key features include:
 
 - `Easy Integration`: Seamlessly integrates into existing code bases, allowing for the refactoring of legacy systems without extensive overhaul.
 - `Ad Hoc Network Creation`: Facilitates the creation of an operational data layer by connecting functions into a single, manageable mesh.
