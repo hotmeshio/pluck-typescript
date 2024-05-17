@@ -787,7 +787,9 @@ class Pluck {
     if (Array.isArray(options.fields)) {
       prefixedFields = options.fields.map(field => `_${field}`);
     } else if (this.search?.schema) {
-      prefixedFields = Object.keys(this.search.schema).map(field => `_${field}`);
+      prefixedFields = Object.entries(this.search.schema).map(([key, value]) => {
+        return 'fieldName' in value ? value.fieldName.toString() : `_${key}`;
+      });
     } else {
       return await this.all(entity, id, options);
     }
@@ -1059,7 +1061,17 @@ class Pluck {
     const my = this;
     let queryString = query.map(q => {
       const { field, is, value, type } = q;
-      const prefixedFieldName = my.search?.schema && field in my.search.schema ? `@_${field}` : `@${field}`;
+      let prefixedFieldName: string;
+      //insert the underscore prefix if requested field in query is not a literal
+      if (my.search?.schema && field in my.search.schema) {
+        if ('fieldName' in my.search.schema[field]) {
+          prefixedFieldName = `@${my.search.schema[field].fieldName}`;
+        } else {
+          prefixedFieldName = `@_${field}`;
+        }
+      } else {
+        prefixedFieldName = `@${field}`;
+      }
       const fieldType = my.search?.schema?.[field]?.type ?? type ?? 'TEXT';
 
       switch (fieldType) {
@@ -1102,7 +1114,7 @@ class Pluck {
    */
   async createSearchIndex(entity: string, options: CallOptions = {}, searchOptions?: HotMeshTypes.WorkflowSearchOptions): Promise<void> {
     const workflowTopic = `${options.taskQueue ?? entity}-${entity}`;
-    const hotMeshClient = await this.getClient().getHotMeshClient(workflowTopic);
+    const hotMeshClient = await this.getClient().getHotMeshClient(workflowTopic, options.namespace);
     return await Durable.Search.configureSearchIndex(hotMeshClient, searchOptions ?? this.search);
   }
 
