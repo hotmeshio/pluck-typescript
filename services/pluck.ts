@@ -273,6 +273,7 @@ class Pluck {
    * data interleaved with the function state data.
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} workflowId - the workflow/job id
+   * @param {string} [namespace='durable'] - the namespace for the client
    * @returns {Promise<string>}
    * @example
    * // mint a key
@@ -280,8 +281,8 @@ class Pluck {
    * 
    * // returns 'hmsh:durable:j:greeting-jsmith123'
    */
-  async mintKey(entity: string, workflowId: string): Promise<string> {
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+  async mintKey(entity: string, workflowId: string, namespace?: string): Promise<string> {
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, namespace);
     const store = handle.hotMesh.engine?.store;
     return store?.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: workflowId, appId: handle.hotMesh.engine?.appId }) as string;
   }
@@ -665,7 +666,7 @@ class Pluck {
     const client = this.getClient();
     try {
       //check the cache
-      const handle = await client.workflow.getHandle(entity, entity, workflowId);
+      const handle = await client.workflow.getHandle(entity, entity, workflowId, options.namespace);
       const state = await handle.hotMesh.getState(`${handle.hotMesh.appId}.execute`, handle.workflowId);
       if (state?.data?.done) {
         return state.data.response as unknown as T;
@@ -736,7 +737,7 @@ class Pluck {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
 
-    const handle = await this.getClient().workflow.getHandle(options.taskQueue ?? entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(options.taskQueue ?? entity, entity, workflowId, options.namespace);
     return await handle.hotMesh.getState(`${handle.hotMesh.appId}.execute`, handle.workflowId);
   }
 
@@ -748,14 +749,16 @@ class Pluck {
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
    * @param {string} id - The workflow/job id
+   * @param {ExportOptions} [options={}] - Configuration options for the export
+   * @param {string} [namespace='durable'] - the namespace for the client
    * 
    * @example
    * // Export a function
    * await pluck.export('greeting', 'jsmith123');
    */
-  async export(entity: string, id: string, options?: HotMeshTypes.ExportOptions): Promise<HotMeshTypes.DurableJobExport> {
+  async export(entity: string, id: string, options?: HotMeshTypes.ExportOptions, namespace?: string): Promise<HotMeshTypes.DurableJobExport> {
     const workflowId = Pluck.mintGuid(entity, id);
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, namespace);
     return await handle.export(options);
   }
 
@@ -796,9 +799,9 @@ class Pluck {
       return await this.all(entity, id, options);
     }
 
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, options.namespace);
     const store = handle.hotMesh.engine?.store;
-    const jobKey = await this.mintKey(entity, workflowId);
+    const jobKey = await this.mintKey(entity, workflowId, options.namespace);
     const vals = await store?.exec('HMGET', jobKey, ...prefixedFields);
     const result = prefixedFields.reduce((obj, field: string, index) => {
       obj[field.substring(1)] = vals?.[index];
@@ -863,9 +866,9 @@ class Pluck {
   async raw(entity: string, id: string, options: CallOptions = {}): Promise<HotMeshTypes.StringAnyType> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, options.namespace);
     const store = handle.hotMesh.engine?.store;
-    const jobKey = await this.mintKey(entity, workflowId);
+    const jobKey = await this.mintKey(entity, workflowId, options.namespace);
     const rawResponse = await store?.exec('HGETALL', jobKey) as string[];
     const responseObj = {};
     for (let i = 0; i < rawResponse.length; i += 2) {
@@ -892,9 +895,9 @@ class Pluck {
   async set(entity: string, id: string, options: CallOptions = {}): Promise<number> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, options.namespace);
     const store = handle.hotMesh.engine?.store;
-    const jobId = await this.mintKey(entity, workflowId);
+    const jobId = await this.mintKey(entity, workflowId, options.namespace);
     const safeArgs: string[] = [];
     for (let key in options.search?.data) {
       safeArgs.push(this.safeKey(key), options.search?.data[key].toString());
@@ -918,9 +921,9 @@ class Pluck {
   async incr(entity: string, id: string, field: string, amount: number, options: CallOptions = {}): Promise<number> {
     const workflowId = Pluck.mintGuid(options.prefix ?? entity, id);
     this.validate(workflowId);
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, options.namespace);
     const store = handle.hotMesh.engine?.store;
-    const jobId = await this.mintKey(entity, workflowId);
+    const jobId = await this.mintKey(entity, workflowId, options.namespace);
     const result = await store?.exec('HINCRBYFLOAT', jobId, this.safeKey(field), amount.toString());
     return Number(result as string);
   }
@@ -943,9 +946,9 @@ class Pluck {
       throw "Invalid arguments [options.fields is not an array]";
     }
     const prefixedFields = options.fields.map(field => `_${field}`);
-    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId);
+    const handle = await this.getClient().workflow.getHandle(entity, entity, workflowId, options.namespace);
     const store = handle.hotMesh.engine?.store;
-    const jobKey = await this.mintKey(entity, workflowId);
+    const jobKey = await this.mintKey(entity, workflowId, options.namespace);
     const count = await store?.exec('HDEL', jobKey, ...prefixedFields);
     return Number(count);
   }
