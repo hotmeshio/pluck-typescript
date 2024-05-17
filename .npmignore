@@ -2,6 +2,7 @@ node_modules/
 src/
 tests/
 docs/
+img/
 services/
 *.log
 *.test.ts
