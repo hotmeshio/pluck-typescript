@@ -209,17 +209,33 @@ describe('Pluck`', () => {
   });
 
   describe('exec', () => {
-    it('should exec a function at a custom namespace', async () => {
+    it('should exec, await, export and flush a durable function at a custom namespace', async () => {
       const context = await pluck.exec<HotMeshTypes.WorkflowContext>({
         entity: 'howdy',
         args: [],
-        options: { namespace: 'staging' },
+        options: { namespace: 'staging', id: 'jimbo123', ttl: 'infinity' },
       });
       expect(context.counter).toEqual(0);
       expect(context.namespace).toEqual('staging');
       expect(context.workflowId).toBeDefined();
       expect(context.workflowDimension).toEqual(''); //main context, no dimension
       expect(context.workflowTopic).toEqual('howdy-howdy');
+       
+      const exported = await pluck.export('howdy', 'jimbo123', { block: ['transitions'], values: false }, 'staging');
+      expect(exported.transitions).toBeUndefined();
+      expect(exported.timeline).toBeDefined();
+
+      await pluck.flush('howdy', 'jimbo123', 'staging');
+
+      try {
+        let job: HotMeshTypes.JobOutput | undefined;
+        do {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          job = await pluck.info('howdy', 'jimbo123', { namespace: 'staging' });
+        } while (true);
+      } catch (error) {
+        expect(error.message).toBe(`howdy-jimbo123 Not Found`);
+      }
     });
 
     it('should exec a function and await the result', async () => {

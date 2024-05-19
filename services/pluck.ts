@@ -517,10 +517,23 @@ class Pluck {
   async flush(entity: string, id: string, namespace?: string): Promise<string | void> {
     const workflowId = Pluck.mintGuid(entity, id);
     //resolve the system signal (this forces the main wrapper function to end)
-    await this.getClient().workflow.signal(`flush-${workflowId}`, {}, namespace);
+    await this.getClient().workflow.signal(
+      `flush-${workflowId}`,
+      {},
+      namespace
+    );
     await new Promise(resolve => setTimeout(resolve, 1000));
-    //hooks may still be running; call `interrupt` to stop all threads
-    await this.interrupt(entity, id, { descend: true, suppress: true, expire: 1 });
+    //other activities may still be running; call `interrupt` to stop all threads
+    await this.interrupt(
+      entity,
+      id, 
+      {
+        descend: true, 
+        suppress: true,
+        expire: 1
+      },
+      namespace
+    );
   }
 
   /**
