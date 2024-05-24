@@ -1,7 +1,7 @@
 # Pluck
 ![alpha release](https://img.shields.io/badge/release-alpha-yellow)
 
-Call any function from any service, reliably and durably. *Pluck unifies and shares your most important functions.*
+Pluck transforms Redis into an Operational Data Layer. *Unify and share your most important functions.*
 
 
 ## Install
