@@ -202,4 +202,9 @@ export type WorkflowOptions = {
    * Set to 'infinity' to make the function durable; otherwise, '1 minute', '1 hour', etc
    */
   ttl?: string;
+  /**
+   * If set to false explicitly it will not await the result
+   * @default true
+   */
+  await?: boolean;
 };

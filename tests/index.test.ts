@@ -43,7 +43,15 @@ describe('Pluck`', () => {
   let callCount = 0;
   const reason = 'I am tired of newsletters';
 
-  const howdy = async (): Promise<HotMeshTypes.WorkflowContext> => {
+  const howdy = async (nest: true): Promise<HotMeshTypes.WorkflowContext> => {
+    if (nest) {
+      console.log('Nesting...');
+      await Pluck.workflow.execChild<HotMeshTypes.WorkflowContext>({
+        entity: 'howdy',
+        args: [false],
+      });
+      console.log('...Nested');
+    }
     return Pluck.workflow.getContext();
   }
 
@@ -158,19 +166,7 @@ describe('Pluck`', () => {
         target: sleeper,
       });
       expect(sleeperWorker).toBeDefined();
-
-      //send a rollcall message to the `greeting` worker;
-      //tell it to announce its full status every 2.5 sec;
-      //max out at 5 messages...no need to spam the
-      //network if no one cares;
-      // pluck.mesh.pub({
-      //   type: 'rollcall',
-      //   topic: `${entityName}-${entityName}`, //target `greeting` entity
-      //   signature: true, //request the stringified target function
-      //   interval: 2.5, //send every 2.5 seconds
-      //   max, //max 5 published messages; THIS IS WHY 5 is the MAX!!!
-      // });
-    });
+    }, 10_000);
 
     it('should connect a function and isolate the namespace', async () => {
       const worker = await pluck.connect<Promise<HotMeshTypes.WorkflowContext>>({
@@ -180,7 +176,6 @@ describe('Pluck`', () => {
       });
       expect(worker).toBeDefined();
     });
-
 
     it('should connect a hook function', async () => {
       const worker = await pluck.connect({
@@ -212,10 +207,14 @@ describe('Pluck`', () => {
     it('should exec, await, export and flush a durable function at a custom namespace', async () => {
       const context = await pluck.exec<HotMeshTypes.WorkflowContext>({
         entity: 'howdy',
-        args: [],
-        options: { namespace: 'staging', id: 'jimbo123', ttl: 'infinity' },
+        args: [true],
+        options: {
+          namespace: 'staging',
+          id: 'jimbo123',
+          ttl: 'infinity'
+        },
       });
-      expect(context.counter).toEqual(0);
+      expect(context.counter).toEqual(1);
       expect(context.namespace).toEqual('staging');
       expect(context.workflowId).toBeDefined();
       expect(context.workflowDimension).toEqual(''); //main context, no dimension
@@ -236,6 +235,24 @@ describe('Pluck`', () => {
       } catch (error) {
         expect(error.message).toBe(`howdy-jimbo123 Not Found`);
       }
+    }, 7_500);
+
+    it('should start a function (and not await)', async () => {
+      const email = 'jan@pluck.com';
+      const name = {first: 'Jan', last: 'Doe'};
+      const entity = 'greeting';
+      const id = 'jan';
+
+      //broker using Pluck (Redis will govern the exchange)
+      const jobId = await pluck.exec<string>({
+        entity,
+        args: [email, name],
+        options: {
+          id,
+          await: false,
+      }});
+
+      expect(jobId).toEqual(`${entity}-${id}`);
     });
 
     it('should exec a function and await the result', async () => {
@@ -246,12 +263,7 @@ describe('Pluck`', () => {
       const brokered = await pluck.exec<Promise<string>>({
         entity: 'greeting',
         args: [email, name],
-        options: { 
-          //SEED the initial workflow state with data (this is
-          //different than the 'args' input data which the workflow
-          //receives as its first argument...this data is available
-          //to the workflow via the 'search' object)
-          //NOTE: search data can be read/written during workflow execution
+        options: {
           search: {
             data: {
               fred: 'flintstone',
