@@ -44,11 +44,35 @@ describe('Pluck`', () => {
   const reason = 'I am tired of newsletters';
 
   const howdy = async (depth = 0): Promise<HotMeshTypes.WorkflowContext> => {
+    //descend (recursion)
     if (depth > 0) {
-      await Pluck.workflow.execChild<HotMeshTypes.WorkflowContext>({
-        entity: 'howdy',
-        args: [depth - 1],
-      });
+      //use promise (collation)
+      await Promise.all([
+        //exec a child (self)
+        Pluck.workflow.execChild<HotMeshTypes.WorkflowContext>({
+          entity: 'howdy', //standard pluck syntax (just provide entity)
+          args: [depth - 1],
+        }),
+        //exec a child (self)
+        Pluck.workflow.execChild<HotMeshTypes.WorkflowContext>({
+          entity: 'howdy',
+          workflowId: `EC${HotMesh.guid()}`, //optional: unique id
+          args: [depth - 1],
+        }),
+        //exec a child (self)
+        Pluck.workflow.execChild<HotMeshTypes.WorkflowContext>({
+          workflowName: 'howdy', //must specify workflowName if 'entity' not provided
+          taskQueue: 'howdy',    //must specify taskQueue if 'entity' not provided
+          args: [depth - 1],
+        }),
+        //start a child (self)
+        Pluck.workflow.startChild({
+          workflowName: 'howdy',
+          taskQueue: 'howdy',
+          workflowId: `SC${HotMesh.guid()}`, //optional: unique id
+          args: [depth - 1],
+        })
+      ]);
     }
     return Pluck.workflow.getContext();
   }
@@ -205,14 +229,15 @@ describe('Pluck`', () => {
     it('should exec a recursive workflow, await, export and flush a durable function at a custom namespace', async () => {
       const context = await pluck.exec<HotMeshTypes.WorkflowContext>({
         entity: 'howdy',
-        args: [3],
+        args: [2],
         options: {
           namespace: 'staging',
           id: 'jimbo123',
           ttl: 'infinity'
         },
       });
-      expect(context.counter).toEqual(1);
+      //4 child workflows (20 total workflows as 16 will be nested)
+      expect(context.counter).toEqual(4);
       expect(context.namespace).toEqual('staging');
       expect(context.workflowId).toBeDefined();
       expect(context.workflowDimension).toEqual(''); //main context, no dimension
@@ -233,7 +258,7 @@ describe('Pluck`', () => {
       } catch (error) {
         expect(error.message).toBe(`howdy-jimbo123 Not Found`);
       }
-    }, 10_000);
+    }, 25_000);
 
     it('should start a function (and not await)', async () => {
       const email = 'jan@pluck.com';
