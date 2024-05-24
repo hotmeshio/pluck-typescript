@@ -2,7 +2,6 @@ import {
   Durable,
   HotMesh,
   Types as HotMeshTypes } from '@hotmeshio/hotmesh';
-//pluck adds a few types in support of durable, long-running workflows
 import {
   CallOptions,
   ConnectionInput,
@@ -378,7 +377,6 @@ class Pluck {
     const targetFunction = { [entity]: async (...args: any[]): Promise<T> => {
       const { callOptions } = this.bindCallOptions(args, options);
       const result = await target.apply(target, args) as T;
-      //pause to retain
       await this.pauseForTTL(result, callOptions);
       return result as T;
     }};
@@ -441,6 +439,14 @@ class Pluck {
    */
   async pauseForTTL<T>(result: T, options: CallOptions) {
     if (options?.ttl && options.$type === 'exec') {
+      //exit early if the pluck wrapper has already run
+      const { counter, replay, workflowDimension } = Pluck.workflow.getContext();
+      const prefix = options.ttl === 'infinity' ? 'wait' : 'sleep';
+      if (`-${prefix}${workflowDimension}-${counter + 1}-` in replay) {
+        return;
+      }
+      //break the event loop
+      await new Promise(resolve => setImmediate(resolve));
       const hotMesh = await Pluck.workflow.getHotMesh();
       const store = hotMesh.engine?.store;
       const jobKey = store?.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine?.appId });
@@ -662,7 +668,10 @@ class Pluck {
    * @param {any[]} input.args - The arguments for the remote function.
    * @param {CallOptions} input.options={} - Extended configuration options for execution (e.g, taskQueue).
    * 
-   * @returns {Promise<T>} A promise that resolves with the result of the remote function execution.
+   * @returns {Promise<T>} A promise that resolves with the result of the remote function execution. If
+   *                     the input options include `await: false`, the promise will resolve with the
+   *                     workflow ID (string) instead of the result. Make sure to pass string as the
+   *                     return type if you are using `await: false`.
    * 
    * @example
    * // Invoke a remote function with arguments and options
@@ -701,7 +710,11 @@ class Pluck {
         workflowTrace: options.workflowTrace,
         workflowSpan: options.workflowSpan,
         namespace: options.namespace,
+        await: options.await,
       });
+      if (options.await === false) {
+        return handle.workflowId as unknown as T;
+      }
       return await handle.result() as unknown as T;
     }
   }
