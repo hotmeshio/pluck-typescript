@@ -3,7 +3,6 @@
 
 Pluck transforms Redis into an Operational Data Layer. *Unify and share your most important functions.*
 
-
 ## Install
 [![npm version](https://badge.fury.io/js/%40hotmeshio%2Fpluck.svg)](https://badge.fury.io/js/%40hotmeshio%2Fpluck)
 

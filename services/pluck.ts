@@ -83,11 +83,8 @@ class Pluck {
     sleepFor: Durable.workflow.sleepFor,
     signal: Durable.workflow.signal,
     hook: Durable.workflow.hook,
-    executeChild: Durable.workflow.execChild,
-    execChild: Durable.workflow.execChild,
     waitForSignal: Durable.workflow.waitFor,
     waitFor: Durable.workflow.waitFor,
-    startChild: Durable.workflow.startChild,
     getHotMesh: Durable.workflow.getHotMesh,
     random: Durable.workflow.random,
     search: Durable.workflow.search,
@@ -100,7 +97,42 @@ class Pluck {
     interrupt: async (entity: string, id: string, options: HotMeshTypes.JobInterruptOptions = {}) => {
       const jobId = Pluck.mintGuid(entity, id);
       await Durable.workflow.interrupt(jobId, options);
-    }
+    },
+
+    /**
+     * Starts a new, subordinated workflow/job execution. NOTE: The child workflow's
+     * lifecycle is bound to the parent workflow, and it will be terminated/scrubbed
+     * when the parent workflow is terminated/scrubbed.
+     * 
+     * @template T The expected return type of the target function.
+     */
+    execChild: async<T>(options: Partial<HotMeshTypes.WorkflowOptions> = {}): Promise<T> => {
+      const pluckOptions = { ...options, args: [...options.args, { $type: 'exec' }] };
+      return Durable.workflow.execChild(pluckOptions as HotMeshTypes.WorkflowOptions);
+    },
+
+    /**
+     * Starts a new, subordinated workflow/job execution. NOTE: The child workflow's
+     * lifecycle is bound to the parent workflow, and it will be terminated/scrubbed
+     * when the parent workflow is terminated/scrubbed.
+     * 
+     * @template T The expected return type of the target function.
+     */
+    executeChild: async<T>(options: Partial<HotMeshTypes.WorkflowOptions> = {}): Promise<T> => {
+      const pluckOptions = { ...options, args: [...options.args, { $type: 'exec' }] };
+      return Durable.workflow.execChild(pluckOptions as HotMeshTypes.WorkflowOptions);
+    },
+
+    /**
+     * Starts a new, subordinated workflow/job execution, awaiting only the jobId, namely,
+     * the confirmation that the suboridinated job has begun. NOTE: The child workflow's
+     * lifecycle is bound to the parent workflow, and it will be terminated/scrubbed
+     * when the parent workflow is terminated/scrubbed.
+     */
+    startChild: async (options: Partial<HotMeshTypes.WorkflowOptions> = {}): Promise<string> => {
+      const pluckOptions = { ...options, args: [...options.args, { $type: 'exec' }] };
+      return Durable.workflow.startChild(pluckOptions as HotMeshTypes.WorkflowOptions);
+    },
   };
 
   /**
@@ -439,14 +471,17 @@ class Pluck {
    */
   async pauseForTTL<T>(result: T, options: CallOptions) {
     if (options?.ttl && options.$type === 'exec') {
-      //exit early if the pluck wrapper has already run
-      const { counter, replay, workflowDimension } = Pluck.workflow.getContext();
+      //exit early if the outer function wrapper has already run
+      const { counter, replay, workflowDimension, workflowId } = Pluck.workflow.getContext();
       const prefix = options.ttl === 'infinity' ? 'wait' : 'sleep';
       if (`-${prefix}${workflowDimension}-${counter + 1}-` in replay) {
         return;
       }
-      //break the event loop
+
+      //break the event loop between the inner function (the user's code)
+      // and the outer function (the Pluck state/durability/ttl-extension wrapper)
       await new Promise(resolve => setImmediate(resolve));
+      options.$guid = options.$guid ?? workflowId;
       const hotMesh = await Pluck.workflow.getHotMesh();
       const store = hotMesh.engine?.store;
       const jobKey = store?.mintKey(HotMeshTypes.KeyType.JOB_STATE, { jobId: options.$guid, appId: hotMesh.engine?.appId });
@@ -1168,6 +1203,17 @@ class Pluck {
    * Wrap activities in a proxy that will durably run them, once.
    */
   static proxyActivities = Durable.workflow.proxyActivities;
+
+  // /**
+  //  * Pluck wraps the Durable class and provides a simplified SDK;
+  //  * however, there are situations where you may want to access functions
+  //  * directly from the Durable class. This is especially true for complex
+  //  * compositional use cases like recursion. For example, use
+  //  * `Pluck.Durable.workflow.execChild` to invoke a workflow registered
+  //  * `via Pluck.Durable.workflow.connect`. But use `Pluck.workflow.execChild`
+  //  * to invoke a workflow registered via `Pluck.connect`.
+  //  */
+  // static Durable = Durable;
 
   /**
    * shut down Pluck (typically on sigint or sigterm)

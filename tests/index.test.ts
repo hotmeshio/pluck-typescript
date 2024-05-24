@@ -43,14 +43,12 @@ describe('Pluck`', () => {
   let callCount = 0;
   const reason = 'I am tired of newsletters';
 
-  const howdy = async (nest: true): Promise<HotMeshTypes.WorkflowContext> => {
-    if (nest) {
-      console.log('Nesting...');
+  const howdy = async (depth = 0): Promise<HotMeshTypes.WorkflowContext> => {
+    if (depth > 0) {
       await Pluck.workflow.execChild<HotMeshTypes.WorkflowContext>({
         entity: 'howdy',
-        args: [false],
+        args: [depth - 1],
       });
-      console.log('...Nested');
     }
     return Pluck.workflow.getContext();
   }
@@ -204,10 +202,10 @@ describe('Pluck`', () => {
   });
 
   describe('exec', () => {
-    it('should exec, await, export and flush a durable function at a custom namespace', async () => {
+    it('should exec a recursive workflow, await, export and flush a durable function at a custom namespace', async () => {
       const context = await pluck.exec<HotMeshTypes.WorkflowContext>({
         entity: 'howdy',
-        args: [true],
+        args: [3],
         options: {
           namespace: 'staging',
           id: 'jimbo123',
@@ -235,7 +233,7 @@ describe('Pluck`', () => {
       } catch (error) {
         expect(error.message).toBe(`howdy-jimbo123 Not Found`);
       }
-    }, 7_500);
+    }, 10_000);
 
     it('should start a function (and not await)', async () => {
       const email = 'jan@pluck.com';
