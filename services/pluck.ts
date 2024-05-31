@@ -23,7 +23,7 @@ class Pluck {
    * The Redis connection options. NOTE: Redis and IORedis
    * use different formats for their connection config.
    * @example
-   * // Instantiate Pluck with an `ioredis` configuration.
+   * // Instantiate Pluck with `ioredis`
    * import Redis from 'ioredis';
    *
    * const pluck = new Pluck(Redis, {
@@ -33,10 +33,10 @@ class Pluck {
    *   db: 0,
    * });
    *
-   * // Instantiate Pluck with 'redis' configuration
+   * // Instantiate Pluck with `redis`
    * import * as Redis from 'redis';
    *
-   * const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
+   * const pluck = new Pluck(Redis, { url: 'redis://:shhh123@localhost:6379' });
    */
   redisOptions: HotMeshTypes.RedisOptions;
 
@@ -139,10 +139,9 @@ class Pluck {
    * 
    * @param {RedisClass} redisClass - the Redis class/import (e.g, `ioredis`, `redis`)
    * @param {StringAnyType} redisOptions - the Redis connection options. These are specific to the package (refer to their docs!). Each uses different property names and structures. 
-   * @param {StringAnyType} model - the data model (e.g, `{ name: { type: 'string' } }`)
    * @param {WorkflowSearchOptions} search - the Redis search options for JSON-based configuration of the Redis FT.Search module index
    * @example
-   * // Instantiate Pluck with an `ioredis` configuration.
+   * // Instantiate Pluck with `ioredis`
    * import Redis from 'ioredis';
    * 
    * const pluck = new Pluck(Redis, {
@@ -152,10 +151,10 @@ class Pluck {
    *   db: 0,
    * });
    * 
-   * // Instantiate Pluck with 'redis' configuration
+   * // Instantiate Pluck with `redis`
    * import * as Redis from 'redis';
    * 
-   * const pluck = new Pluck(Redis, { url: 'redis://:key_admin@localhost:6379' });
+   * const pluck = new Pluck(Redis, { url: 'redis://:shhh123@localhost:6379' });
    */
   constructor(redisClass: Partial<HotMeshTypes.RedisClass>, redisOptions: Partial<HotMeshTypes.RedisOptions>, search?: HotMeshTypes.WorkflowSearchOptions) {
     this.redisClass = redisClass as HotMeshTypes.RedisClass;
@@ -1062,7 +1061,7 @@ class Pluck {
    * NOTE: If the type is TAG for an entity, `.`, `@`, and `-` must be escaped.
    * 
    * @param {string} entity - the entity name (e.g, 'user', 'order', 'product')
-   * @param {FindWhereOptions} options - find options (the query)
+   * @param {FindWhereOptions} options - find options (the query). A custom search schema may be provided to target any index on the Redis backend.
    * @returns {Promise<SearchResults | number>} Returns a number if `count` is true, otherwise a SearchResults object.
    * @example
    * const results = await pluck.findWhere('greeting', {
@@ -1079,7 +1078,8 @@ class Pluck {
    * // returns { count: 1, query: 'FT.SEARCH my-index @_name:"John" @_age:[2 +inf] @_quantity:[89 89] LIMIT 0 10', data: [ { name: 'John', quantity: '89' } ] }
    */
   async findWhere(entity: string, options: HotMeshTypes.FindWhereOptions): Promise<HotMeshTypes.SearchResults | number> {
-    const args: string[] = [this.generateSearchQuery(options.query)];
+    const targetSearch = options.options?.search ?? this.search;
+    const args: string[] = [this.generateSearchQuery(options.query, targetSearch)];
     if (options.count) {
       args.push('LIMIT', '0', '0');
     } else {
@@ -1103,7 +1103,7 @@ class Pluck {
     }
     const FTResults = await this.find(entity, options.options ?? {}, ...args);
     const count = FTResults[0] as number;
-    const sargs = `FT.SEARCH ${options.options?.index ?? options.options?.search?.index ?? this.search.index} ${args.join(' ')}`;
+    const sargs = `FT.SEARCH ${options.options?.index ?? targetSearch?.index} ${args.join(' ')}`;
     if (options.count) {
       //always return number format if count is requested
       return !isNaN(count) || count > 0 ? count : 0;
@@ -1117,28 +1117,28 @@ class Pluck {
   /**
    * Generates a search query from a FindWhereQuery array
    * @param {FindWhereQuery[] | string} [query]
+   * @param {WorkflowSearchOptions} [search]
    * @returns {string}
    * @private
    */
-  generateSearchQuery(query: HotMeshTypes.FindWhereQuery[] | string): string {
+  generateSearchQuery(query: HotMeshTypes.FindWhereQuery[] | string, search?: HotMeshTypes.WorkflowSearchOptions): string {
     if (!Array.isArray(query) || query.length === 0) {
       return typeof(query) === 'string' ? query as string : '*';
     }
-    const my = this;
     let queryString = query.map(q => {
       const { field, is, value, type } = q;
       let prefixedFieldName: string;
       //insert the underscore prefix if requested field in query is not a literal
-      if (my.search?.schema && field in my.search.schema) {
-        if ('fieldName' in my.search.schema[field]) {
-          prefixedFieldName = `@${my.search.schema[field].fieldName}`;
+      if (search?.schema && field in search.schema) {
+        if ('fieldName' in search.schema[field]) {
+          prefixedFieldName = `@${search.schema[field].fieldName}`;
         } else {
           prefixedFieldName = `@_${field}`;
         }
       } else {
         prefixedFieldName = `@${field}`;
       }
-      const fieldType = my.search?.schema?.[field]?.type ?? type ?? 'TEXT';
+      const fieldType = search?.schema?.[field]?.type ?? type ?? 'TEXT';
 
       switch (fieldType) {
         case 'TAG':
