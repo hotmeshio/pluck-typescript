@@ -1,9 +1,7 @@
 # Pluck
 ![beta release](https://img.shields.io/badge/release-beta-blue.svg)
 
-Pluck transforms Redis into an Operational Data Layer. 
-
-*Expose and unify your distributed functions.*
+Pluck transforms Redis into an Operational Data Layer. *Expose and organize  your distributed functions.*
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40hotmeshio%2Fpluck.svg)](https://badge.fury.io/js/%40hotmeshio%2Fpluck)
