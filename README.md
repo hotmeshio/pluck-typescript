@@ -1,7 +1,7 @@
 # Pluck
 ![beta release](https://img.shields.io/badge/release-beta-blue.svg)
 
-Pluck transforms Redis into an Operational Data Layer. *Expose and organize  your distributed functions.*
+Pluck transforms Redis into an [HTAP](https://en.wikipedia.org/wiki/Hybrid_transactional/analytical_processing) Engine. *Execute and analyze your distributed functions at scale.*
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40hotmeshio%2Fpluck.svg)](https://badge.fury.io/js/%40hotmeshio%2Fpluck)
@@ -12,7 +12,7 @@ npm install @hotmeshio/pluck
 ## Documentation and Key Features
 [SDK Documentation](https://hotmeshio.github.io/pluck-typescript/)
 
-Pluck is a TypeScript library designed to simplify the invocation and management of distributed functions across your cloud infrastructure. By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing business logic at high speed within a microservices architecture. Key features include:
+Pluck is a TypeScript library designed to simplify and accelerate the invocation and management of distributed functions across your cloud infrastructure. By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing business logic at high speed within a microservices architecture. Key features include:
 
 - `Easy Integration`: Seamlessly integrates into existing code bases, allowing for the refactoring of legacy systems without extensive overhaul.
 - `Ad Hoc Network Creation`: Facilitates the creation of an operational data layer by connecting functions into a single, manageable mesh.
@@ -26,7 +26,7 @@ Pluck is designed with the cloud developer in mind, offering a straightforward a
 ## Understanding Pluck
 Pluck inverts the relationship to Redis: those functions that once used Redis as a cache, are instead *cached and governed* by Redis. This inversion of control is particularly effective at refactoring a legacy code base.
 
-Consider the following. It's a typical microservices network, with a tangled mess of services and functions. There's important business logic in there (functions *A*, *B* and *C* are critical!), but they're hard to find and access.
+Consider the following. It's a typical microservices network, with a tangled mess of services and functions. There's important business logic in there (functions *A*, *B* and *C* are critical), but it's hard to find and access.
 
 <img src="./img/operational_data_layer.png" alt="A Tangled Microservices Network with 3 valuable functions buried within" style="max-width:100%;width:600px;">
 
