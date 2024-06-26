@@ -1,4 +1,5 @@
 import { Types as HotMeshTypes } from "@hotmeshio/hotmesh";
+import { StringStringType } from "@hotmeshio/hotmesh/build/types";
 
 export type CallOptions = {
   /**
@@ -38,7 +39,27 @@ export type CallOptions = {
    * namespace for the the execution client; how it appears in Redis (defaults to 'durable')
    */
   namespace?: string; //optional namespace for the workflowId (defaults to 'durable')
-  flush?: boolean;
+
+  /**
+   * Custom marker data field used for adding a searchable marker to the job.
+   * markers always begin with a dash (-). Any field that does not
+   * begin with a dash will be removed and will not be inserted with
+   * the initial data set.
+   */
+  marker?: StringStringType;
+
+  /**
+   * If provided, the job will initialize in an expired state, reserving
+   * only the job ID (HSETNX) and persisting search and marker (if provided).
+   * If a `resume` signal is sent before the specified number of seconds,
+   * the job will resume as normal. If the job is not resumed within the
+   * number of seconds provided, the job will be scrubbed. No dependencies
+   * are set for a job in an expired state; however, dependencies will be
+   * added after the job is resumed (if necessary).
+   */
+  expired?: number;
+
+  //flush?: boolean;
 };
 
 export type ConnectOptions = {
@@ -162,49 +183,79 @@ export type WorkflowOptions = {
    * The app deployment namespace; how it appears in redis (e.g., 'durable')
    */
   namespace?: string;
+
   /**
    * Target connected functions more specifically by taskQueue
    */
   taskQueue?: string;
+
   /**
    * The connected function's entity identifier
    */
   prefix?: string;
+
   /**
    * The function execution id (shorthand for workflowId)
    */
   id?: string;
+
   /**
    * The function execution id
    */
   workflowId?: string;
+
   /**
    * The function name (`entity` is a shorthand for this)
    */
   workflowName?: string;
+
   /**
    * The open telemetry trace context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
    */
   workflowTrace?: string;
+
   /**
    * The open telemetry span context for the workflow, used for logging and tracing. If a sink is enabled, this will be sent to the sink.
    */
   workflowSpan?: string;
+
   /**
    * Search fields to seed function state when it first initializes
    */
   search?: HotMeshTypes.WorkflowSearchOptions;
+
   /**
    * Extended execution options
    */
   config?: HotMeshTypes.WorkflowConfig;
+
   /**
    * Set to 'infinity' to make the function durable; otherwise, '1 minute', '1 hour', etc
    */
   ttl?: string;
+
   /**
    * If set to false explicitly it will not await the result
    * @default true
    */
   await?: boolean;
+
+  /**
+   * Custom marker data field used for adding a searchable marker to the job.
+   * markers always begin with a dash (-). Any field that does not
+   * begin with a dash will be removed and will not be inserted with
+   * the initial data set.
+   */
+  marker?: StringStringType;
+
+  /**
+   * If provided, the job will initialize in an expired state, reserving
+   * only the job ID (HSETNX) and persisting search and marker (if provided).
+   * If a `resume` signal is sent before the specified number of seconds,
+   * the job will resume as normal. If the job is not resumed within the
+   * number of seconds provided, the job will be scrubbed. No dependencies
+   * are set for a job in an expired state; however, dependencies will be
+   * added after the job is resumed (if necessary).
+   */
+  expired?: number;
 };
