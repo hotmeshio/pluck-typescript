@@ -322,7 +322,7 @@ const results = await pluck.findWhere('user', {
 ## Examples and Use Cases
 Refer to the [Pluck JavaScript Examples](https://github.com/hotmeshio/samples-javascript/blob/main/test.js) for the simplest, end-to-end example that demonstrates the use of Pluck to operationalize a function, create a search index, and query the index.
 
-For a more in-depth example that demonstrates `hooks`, `signals`, and many of the other workflow extension methods, refer to the the [Pluck TypeScript Examples](https://github.com/hotmeshio/samples-typescript/tree/main/services/pluck).
+For a more in-depth example that demonstrates `hooks`, `signals`, and many of the other workflow extension methods, refer to the the [JavaScript/TypeScript Examples](https://github.com/hotmeshio/samples-javascript/tree/main/services/pluck).
 
 ## Build, Test and Extend
 The source files include a docker-compose that spins up one Redis instance and one Node instance. The RediSearch module is enabled. Refer to the unit tests for usage examples for getting/setting data, creating a search index, and optimizing activity calls with proxy wrappers.
