@@ -49,15 +49,15 @@ export type CallOptions = {
   marker?: StringStringType;
 
   /**
-   * If provided, the job will initialize in an expired state, reserving
+   * If provided, the job will initialize in an pending state, reserving
    * only the job ID (HSETNX) and persisting search and marker (if provided).
    * If a `resume` signal is sent before the specified number of seconds,
    * the job will resume as normal. If the job is not resumed within the
    * number of seconds provided, the job will be scrubbed. No dependencies
-   * are set for a job in an expired state; however, dependencies will be
-   * added after the job is resumed (if necessary).
+   * are set for a job in a pending state; however, dependencies will be
+   * added after the job is resumed if necessary.
    */
-  expired?: number;
+  pending?: number;
 
   //flush?: boolean;
 };
@@ -249,13 +249,13 @@ export type WorkflowOptions = {
   marker?: StringStringType;
 
   /**
-   * If provided, the job will initialize in an expired state, reserving
+   * If provided, the job will initialize in a pending state, reserving
    * only the job ID (HSETNX) and persisting search and marker (if provided).
    * If a `resume` signal is sent before the specified number of seconds,
    * the job will resume as normal. If the job is not resumed within the
    * number of seconds provided, the job will be scrubbed. No dependencies
-   * are set for a job in an expired state; however, dependencies will be
+   * are set for a job in a pending state; however, dependencies will be
    * added after the job is resumed (if necessary).
    */
-  expired?: number;
+  pending?: number;
 };
