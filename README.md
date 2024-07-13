@@ -1,7 +1,7 @@
 # Pluck
 ![beta release](https://img.shields.io/badge/release-beta-blue.svg)
 
-Pluck transforms Redis into an [HTAP](https://en.wikipedia.org/wiki/Hybrid_transactional/analytical_processing) Engine. *Execute and analyze your distributed functions at scale.*
+Pluck is a TypeScript library designed to simplify the invocation and management of distributed functions across your cloud infrastructure. 
 
 ## Install
 [![npm version](https://badge.fury.io/js/%40hotmeshio%2Fpluck.svg)](https://badge.fury.io/js/%40hotmeshio%2Fpluck)
@@ -12,11 +12,11 @@ npm install @hotmeshio/pluck
 ## Documentation and Key Features
 [SDK Documentation](https://hotmeshio.github.io/pluck-typescript/)
 
-Pluck is a TypeScript library designed to simplify and accelerate the invocation and management of distributed functions across your cloud infrastructure. By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing business logic at high speed within a microservices architecture. Key features include:
+By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing data at high speed within a microservices architecture. Key features include:
 
 - `Easy Integration`: Seamlessly integrates into existing code bases, allowing for the refactoring of legacy systems without extensive overhaul.
-- `Ad Hoc Network Creation`: Facilitates the creation of an operational data layer by connecting functions into a single, manageable mesh.
-- `Durable Workflow Support`: Supports the transformation of functions into durable workflows with Redis-backed persistence.
+- `Ad Hoc Network Creation`: Creates an operational data layer by connecting functions into a single, manageable mesh.
+- `Durable Workflow Support`: Transforms functions into durable workflows with Redis-backed persistence.
 - `Flexible Function Invocation`: Functions can be called remotely with ease, supporting both cached and uncached execution modes.
 - `Workflow Extensions`: Offers a suite of workflow extension methods including hooks for extending functionality, signal handling for inter-process communication, and sleep for delaying execution.
 - `Search and Indexing`: Provides tools for managing workflow state and leveraging Redis' search capabilities to query operational data.
@@ -30,13 +30,11 @@ Consider the following. It's a typical microservices network, with a tangled mes
 
 <img src="./img/operational_data_layer.png" alt="A Tangled Microservices Network with 3 valuable functions buried within" style="max-width:100%;width:600px;">
 
-Pluck creates an *ad hoc*, Redis-backed network of functions (your "operational data layer"). It's a simple, yet powerful, way to expose and unify your most important functions into a single mesh.
-
-*Any service with access to Redis can join in the network, bypassing the legacy clutter.*
+Pluck untangles "distributed monoliths" without adding infrastructure. It's a simple, yet powerful, way to unify critical business logic.
 
 ## Design
 ### Connect Your Functions
-Easily expose your target functions. Here the legacy `getUser` function is registered as `user`.
+Here the legacy `getUser` function is registered as `user` with Pluck.
 
 ```javascript
 import * as Redis from 'redis'; //or `import Redis from 'ioredis'`
@@ -56,7 +54,7 @@ pluck.connect({
 ```
 
 ### Execute
-Call connected functions from anywhere on the network with a connection to Redis.
+Call connected functions from any service with a connection to Redis.
 
 ```javascript
 import * as Redis from 'redis';
@@ -86,7 +84,7 @@ const response = await pluck.exec({
 ```
 
 ### Execute and Operationalize
-Provide a `ttl` of `infinity` to operationalize the function. It's now a **durable workflow** with all the benefits of Redis-backed governance.
+Provide a `ttl` of `infinity` to operationalize the function. It's now a long-running, **durable workflow** with all the benefits of Redis-backed governance.
 
 ```javascript
 const response = await pluck.exec({
@@ -99,8 +97,8 @@ const response = await pluck.exec({
 // AND REMAINS ACTIVE!
 ```
 
-## Operationalize Your Functions: Data in Motion
-Pluck does more than route function calls. Setting `ttl` to `infinity` converts the function into a *durable workflow*. Your function will now run as part of the Redis-backed operational data layer (ODL) and can only be removed by calling `flush`.
+## Operationalized Functions: Data in Motion
+Pluck does more than route function calls. Setting `ttl` to `infinity` converts the function into a *durable workflow*. The function will now run as part of the Redis-backed operational data layer (ODL) and can only be removed by calling `flush`.
 
 ```javascript
 const response = await pluck.flush( 'user', 'jsmith123');
