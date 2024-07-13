@@ -12,7 +12,7 @@ npm install @hotmeshio/pluck
 ## Documentation and Key Features
 [SDK Documentation](https://hotmeshio.github.io/pluck-typescript/)
 
-By leveraging Redis for function governance, Pluck offers a robust solution for operationalizing data at high speed within a microservices architecture. Key features include:
+By leveraging Redis for function governance, Pluck transforms your functions into an operational data layer. Key features include:
 
 - `Easy Integration`: Seamlessly integrates into existing code bases, allowing for the refactoring of legacy systems without extensive overhaul.
 - `Ad Hoc Network Creation`: Creates an operational data layer by connecting functions into a single, manageable mesh.
@@ -30,7 +30,7 @@ Consider the following. It's a typical microservices network, with a tangled mes
 
 <img src="./img/operational_data_layer.png" alt="A Tangled Microservices Network with 3 valuable functions buried within" style="max-width:100%;width:600px;">
 
-Pluck untangles "distributed monoliths" without adding infrastructure. It's a simple, yet powerful, way to unify critical business logic.
+Pluck untangles *distributed monoliths* without adding infrastructure. It's a simple, yet powerful, way to "pluck" and unify your critical business logic.
 
 ## Design
 ### Connect Your Functions
