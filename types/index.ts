@@ -258,4 +258,16 @@ export type WorkflowOptions = {
    * added after the job is resumed (if necessary).
    */
   pending?: number;
+
+  /**
+   * sets the number of seconds a workflow may exist after completion. As the process engine is an in-memory cache, the default policy is to expire and scrub the job hash as soon as it completes.
+   * @default 1
+   */
+  expire?: number;
+
+  /**
+   * set to false to optimize workflows that do not require a `signal in`
+   * @default true
+   */
+  signalIn?: boolean;
 };

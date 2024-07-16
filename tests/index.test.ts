@@ -273,6 +273,7 @@ describe('Pluck`', () => {
         options: {
           id,
           await: false,
+          signalIn: false,
       }});
 
       expect(jobId).toEqual(`${entity}-${id}`);
@@ -295,6 +296,7 @@ describe('Pluck`', () => {
           },
           id: 'jdoe',
           ttl: '60 seconds',
+          signalIn: false,
         }});
 
       //call directly (NodeJS will govern the exchange)
@@ -315,6 +317,9 @@ describe('Pluck`', () => {
       await pluck.exec<void>({
         entity: 'sleeper',
         args: ['sleeper@pluck.com'],
+        options: {
+          signalIn: false,
+        }
       });
     }, 20_000);
 

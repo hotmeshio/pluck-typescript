@@ -747,6 +747,8 @@ class Pluck {
         await: options.await,
         marker: options.marker,
         pending: options.pending,
+        expire: options.expire,
+        signalIn: options.signalIn,
       });
       if (options.await === false) {
         return handle.workflowId as unknown as T;
