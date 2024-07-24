@@ -1,5 +1,5 @@
-# Pluck
-![beta release](https://img.shields.io/badge/release-beta-blue.svg)
+# Pluck - Deprecated
+**Notice:** Pluck has been moved, continued, and renamed ("MeshData") at [@hotmeshio/hotmesh](https://npmjs.com/package/@hotmeshio/hotmesh). Please use and refer to the [MeshData SDK Docs](https://hotmeshio.github.io/sdk-typescript/classes/services_meshdata.MeshData.html) for the latest updates and features for the MeshData package.
 
 Pluck is a TypeScript library designed to simplify the invocation and management of distributed functions across your cloud infrastructure. 
 
